@@ -3,7 +3,7 @@ UseTab: AlignWithSpaces
 TabWidth: 2
 AlignAfterOpenBracket: Align
 PointerAlignment: Left
-ColumnLimit: 120
+ColumnLimit: 89
 IndentCaseLabels: true
 IndentCaseBlocks: false
 AllowShortFunctionsOnASingleLine: false
