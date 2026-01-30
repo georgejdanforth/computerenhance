@@ -10,7 +10,7 @@
 	if (StrEquals(argv[1], name))                                                         \
 		return fn(argc, argv);
 
-void printUsage(void) {
+static void printUsage(void) {
 	printf("Usage: computerenhance <command>\n\n"
 	       "Run the given computerenhance course program.\n\n"
 	       "Available commands:\n"
