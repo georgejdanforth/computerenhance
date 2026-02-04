@@ -16,5 +16,8 @@ $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+debug: CFLAGS += -g -O0
+debug: $(TARGET)
+
 clean:
 	rm -rf $(BUILD) $(TARGET)
