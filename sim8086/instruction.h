@@ -60,9 +60,29 @@ typedef struct {
 	Register reg;
 } RegisterLoc;
 
+typedef enum {
+	EA_BX_SI,
+	EA_BX_DI,
+	EA_BP_SI,
+	EA_BP_DI,
+	EA_SI,
+	EA_DI,
+	EA_BP,
+	EA_BX,
+	// Used for direct address
+	EA_NONE,
+} EffectiveAddress;
+
 typedef struct {
 	MovLocType type;
+	EffectiveAddress ea;
+	u16 disp;
 } MemoryLoc;
+
+typedef struct {
+	MovLocType type;
+	u16 data;
+} ImmediateLoc;
 
 void InstructionUnparse(Instruction* instr, StringBuilder* sb);
 
