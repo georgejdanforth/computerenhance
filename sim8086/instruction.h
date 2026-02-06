@@ -20,41 +20,7 @@ typedef enum {
 	ENC_REG_IMM,    // Register in low 3 bits w/ immediate sized by W bit
 } OpEncoding;
 
-typedef struct {
-	InstructionType type;
-	OpEncoding enc;
-} OpCode;
-
-extern const OpCode OpCodeTable[];
-
-typedef struct {
-	InstructionType type;
-	OpCode oc;
-} Instruction;
-
-typedef enum {
-	ML_Register,
-	ML_Memory,
-	ML_Immediate,
-} MovLocType;
-
-typedef struct {
-	MovLocType type;
-} MovLoc;
-
-typedef struct {
-	InstructionType type;
-	OpCode oc;
-	MovLoc* src;
-	MovLoc* dst;
-} MovInstruction;
-
 typedef enum { AX, BX, CX, DX, SP, BP, SI, DI, AL, AH, BL, BH, CL, CH, DL, DH } Register;
-
-typedef struct {
-	MovLocType type;
-	Register reg;
-} RegisterLoc;
 
 typedef enum {
 	EA_BX_SI,
@@ -69,16 +35,57 @@ typedef enum {
 	EA_NONE,
 } EffectiveAddress;
 
+typedef enum {
+	LOC_REG,
+	LOC_IMM,
+	LOC_MEM,
+	LOC_ACC,
+} LocType;
+
 typedef struct {
-	MovLocType type;
+	InstructionType type;
+	OpEncoding enc;
+} OpCode;
+
+extern const OpCode OpCodeTable[];
+
+typedef struct {
+	LocType type;
+	Register reg;
+} RegisterLoc;
+
+typedef struct {
+	LocType type;
+	u16 data;
+} ImmediateLoc;
+
+typedef struct {
+	LocType type;
 	EffectiveAddress ea;
 	u16 disp;
 } MemoryLoc;
 
+typedef union {
+	LocType type;
+	RegisterLoc reg;
+	ImmediateLoc imm;
+	MemoryLoc mem;
+} Loc;
+
 typedef struct {
-	MovLocType type;
-	u16 data;
-} ImmediateLoc;
+	Loc src;
+	Loc dst;
+} LocPair;
+
+typedef struct {
+	OpCode oc;
+	LocPair locs;
+} MovInstruction;
+
+typedef union {
+	OpCode oc;
+	MovInstruction mov;
+} Instruction;
 
 void InstructionUnparse(Instruction* instr, StringBuilder* sb);
 

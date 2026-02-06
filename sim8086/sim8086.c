@@ -5,31 +5,35 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/arena.h"
 #include "common/strings.h"
 #include "common/types.h"
 
 #include "instruction.h"
 #include "sim8086.h"
 
-#define ARENA_SIZE 1024;
+#define ERR_NONE 0
+#define ERR_EOF 1
+#define ERR_UNKNOWN 2
+
+#define ERROR(e)                                                                        \
+	ctx->err = e;                                                                         \
+	return;
 
 typedef struct {
 	File* f;
-	Arena* allocator;
+	error err;
 	u8 len;
 	u8 bytes[6];
 } DecodeContext;
 
 static void printUsage(void);
 static int decodeFile(File* f);
-static Instruction* decodeInstruction(File* f, Arena* allocator);
-static MovInstruction* decodeMov(DecodeContext* ctx, OpCode oc);
-static void decodeMovRM(DecodeContext* ctx, MovInstruction* instr, error* err);
-static void decodeMovIR(DecodeContext* ctx, MovInstruction* instr, error* err);
-static MemoryLoc* decodeMemoryLoc(DecodeContext* ctx, error* err);
-static ImmediateLoc* decodeImmediateLoc(DecodeContext* ctx, bool w, usize idx,
-                                        error* err);
+static Instruction decodeInstruction(DecodeContext* ctx);
+static void decodeMov(DecodeContext* ctx, MovInstruction* instr);
+static void decodeModRM(DecodeContext* ctx, LocPair* locs);
+static void decodeRegImm(DecodeContext* ctx, LocPair* locs);
+static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc);
+static void decodeImmediateLoc(DecodeContext* ctx, ImmediateLoc* loc, bool w, usize idx);
 
 int RunSim8086(int argc, char** argv) {
 	if (argc != 3) {
@@ -74,76 +78,66 @@ static int read(DecodeContext* ctx, usize n) {
 }
 
 static int decodeFile(File* f) {
-	Arena allocator = ArenaCreate(1024);
 	StringBuilder sb = StringBuilderCreate();
+	Instruction instr;
+	DecodeContext ctx;
+	ctx.f = f;
 	while (true) {
-		Instruction* instr = decodeInstruction(f, &allocator);
-		if (instr == null) {
+		ctx.err = ERR_NONE;
+		ctx.len = 0;
+		instr = decodeInstruction(&ctx);
+		if (ctx.err != 0) {
 			break;
 		}
-		InstructionUnparse(instr, &sb);
+		InstructionUnparse(&instr, &sb);
 		char* str = StringBuilderString(&sb);
 		printf("%s\n", str);
 		StringBuilderRewind(&sb);
 	}
-	return feof(f) ? EXIT_SUCCESS : EXIT_FAILURE;
+
+	if (ctx.err == ERR_NONE || ctx.err == ERR_EOF) {
+		return EXIT_SUCCESS;
+	}
+	return EXIT_FAILURE;
 }
 
-static Instruction* decodeInstruction(File* f, Arena* allocator) {
-	DecodeContext ctx;
-	ctx.allocator = allocator;
-	ctx.f = f;
-	ctx.len = 0;
+static Instruction decodeInstruction(DecodeContext* ctx) {
+	Instruction instr = {0};
 
-	if (read(&ctx, 1) != 0) {
-		return null;
+	int result;
+	if ((result = read(ctx, 1)) != 0) {
+		ctx->err = result == 1 ? ERR_EOF : ERR_UNKNOWN;
+		return instr;
 	}
 
-	u8 b1 = ctx.bytes[0];
-	OpCode oc = OpCodeTable[b1];
+	u8 b1 = ctx->bytes[0];
+	instr.oc = OpCodeTable[b1];
 
-	switch (oc.type) {
+	switch (instr.oc.type) {
 		case IT_MOV:
-			return (Instruction*)decodeMov(&ctx, oc);
+			decodeMov(ctx, &instr.mov);
+			break;
 		default:
 			fprintf(stderr, "Unhandled opcode: %02x\n", b1);
-			return null;
+			ctx->err = ERR_UNKNOWN;
+			return instr;
 	}
-
-	return null;
-}
-
-static MovInstruction* newMovInstruction(Arena* allocator, OpCode oc) {
-	MovInstruction* instr = ArenaAlloc(allocator, sizeof(MovInstruction));
-	instr->type = IT_MOV;
-	instr->oc = oc;
-	instr->dst = null;
-	instr->src = null;
 
 	return instr;
 }
 
-static MovInstruction* decodeMov(DecodeContext* ctx, OpCode oc) {
-	MovInstruction* instr = newMovInstruction(ctx->allocator, oc);
-
-	error err = 0;
-	switch (oc.enc) {
+static void decodeMov(DecodeContext* ctx, MovInstruction* instr) {
+	switch (instr->oc.enc) {
 		case ENC_MODRM:
-			decodeMovRM(ctx, instr, &err);
+			decodeModRM(ctx, &instr->locs);
 			break;
 		case ENC_REG_IMM:
-			decodeMovIR(ctx, instr, &err);
+			decodeRegImm(ctx, &instr->locs);
 			break;
 		default:
 			fprintf(stderr, "Unhandled opcode: %02x\n", ctx->bytes[0]);
 			assert(false);
 	}
-
-	if (err != 0) {
-		return null;
-	}
-
-	return instr;
 }
 
 static Register getRegister(u8 b, bool w) {
@@ -179,17 +173,9 @@ static Register getRegister(u8 b, bool w) {
 	assert(false);
 }
 
-static RegisterLoc* newRegisterLoc(Arena* allocator, u8 b, bool w) {
-	RegisterLoc* loc = ArenaAlloc(allocator, sizeof(RegisterLoc));
-	loc->type = ML_Register;
-	loc->reg = getRegister(b, w);
-	return loc;
-}
-
-static void decodeMovRM(DecodeContext* ctx, MovInstruction* instr, error* err) {
+static void decodeModRM(DecodeContext* ctx, LocPair* locs) {
 	if (read(ctx, 1) != 0) {
-		*err = 1;
-		return;
+		ERROR(ERR_UNKNOWN);
 	}
 
 	u8 b1 = ctx->bytes[0];
@@ -197,41 +183,45 @@ static void decodeMovRM(DecodeContext* ctx, MovInstruction* instr, error* err) {
 	bool d = (b1 & 0x02) == 0x02;
 	bool w = (b1 & 0x01) == 0x01;
 
-	MovLoc* regLoc = (MovLoc*)newRegisterLoc(ctx->allocator, (b2 & 0x38) >> 3, w);
-	MovLoc* rmLoc;
+	Loc regLoc;
+	regLoc.reg.type = LOC_REG;
+	regLoc.reg.reg = getRegister((b2 & 0x39) >> 3, w);
 
+	Loc rmLoc;
 	if ((b2 & 0xC0) == 0xC0) {
 		// Register mode
-		rmLoc = (MovLoc*)newRegisterLoc(ctx->allocator, b2 & 0x07, w);
+		rmLoc.reg.type = LOC_REG;
+		rmLoc.reg.reg = getRegister(b2 & 0x07, w);
 	} else {
 		// Memory mode
-		rmLoc = (MovLoc*)decodeMemoryLoc(ctx, err);
+		decodeMemoryLoc(ctx, &rmLoc.mem);
 	}
 
 	if (d) {
-		instr->dst = regLoc;
-		instr->src = rmLoc;
+		locs->dst = regLoc;
+		locs->src = rmLoc;
 	} else {
-		instr->dst = rmLoc;
-		instr->src = regLoc;
+		locs->dst = rmLoc;
+		locs->src = regLoc;
 	}
 }
 
-static void decodeMovIR(DecodeContext* ctx, MovInstruction* instr, error* err) {
+static void decodeRegImm(DecodeContext* ctx, LocPair* locs) {
 	u8 b1 = ctx->bytes[0];
 	bool w = (b1 & 0x08) == 0x08;
 
-	instr->dst = (MovLoc*)newRegisterLoc(ctx->allocator, b1 & 0x07, w);
-	instr->src = (MovLoc*)decodeImmediateLoc(ctx, w, 1, err);
+	locs->dst.reg.type = LOC_REG;
+	locs->dst.reg.reg = getRegister(b1 & 0x07, w);
+
+	decodeImmediateLoc(ctx, &(locs->src.imm), w, 1);
 }
 
-static MemoryLoc* decodeMemoryLoc(DecodeContext* ctx, error* err) {
+static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc) {
 #define SET_EA(e)                                                                       \
 	loc->ea = e;                                                                          \
 	break;
 
-	MemoryLoc* loc = ArenaAlloc(ctx->allocator, sizeof(MemoryLoc));
-	loc->type = ML_Memory;
+	loc->type = LOC_MEM;
 	loc->disp = 0;
 
 	u8 b2 = ctx->bytes[1];
@@ -258,17 +248,15 @@ static MemoryLoc* decodeMemoryLoc(DecodeContext* ctx, error* err) {
 		mode = 0x80;
 	}
 	if (mode == 0x00) {
-		return loc;
+		return;
 	} else if (mode == 0x40) {
 		if(read(ctx, 1) != 0) {
-			*err = 1;
-			return null;
+			ERROR(ERR_UNKNOWN);
 		}
 		loc->disp = (u16)(ctx->bytes[2]);
 	} else if (mode == 0x80) {
 		if(read(ctx, 2) != 0) {
-			*err = 1;
-			return null;
+			ERROR(ERR_UNKNOWN);
 		}
 		loc->disp = ((u16)(ctx->bytes[2])) | ((u16)(ctx->bytes[3]) << 8);
 	} else {
@@ -277,28 +265,21 @@ static MemoryLoc* decodeMemoryLoc(DecodeContext* ctx, error* err) {
 		assert(false);
 	}
 
-	return loc;
-
 #undef SET_EA
 }
 
-static ImmediateLoc* decodeImmediateLoc(DecodeContext* ctx, bool w, usize idx, error* err) {
-	ImmediateLoc* loc = ArenaAlloc(ctx->allocator, sizeof(ImmediateLoc));
-	loc->type = ML_Immediate;
+static void decodeImmediateLoc(DecodeContext* ctx, ImmediateLoc* loc, bool w, usize idx) {
+	loc->type = LOC_IMM;
 
 	if (w) {
 		if(read(ctx, 2) != 0) {
-			*err = 1;
-			return null;
+			ERROR(ERR_UNKNOWN);
 		}
 		loc->data = ((u16)(ctx->bytes[idx])) | ((u16)(ctx->bytes[idx + 1]) << 8);
 	} else {
 		if (read(ctx, 1) != 0) {
-			*err = 1;
-			return null;
+			ERROR(ERR_UNKNOWN);
 		};
 		loc->data = (u16)(ctx->bytes[idx]);
 	}
-
-	return loc;
 }

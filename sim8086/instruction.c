@@ -263,42 +263,42 @@ const OpCode OpCodeTable[] = {
 };
 
 void unparseMov(MovInstruction* instr, StringBuilder* sb);
-void unparseMovLoc(MovLoc* loc, StringBuilder* sb);
+void unparseLoc(Loc* loc, StringBuilder* sb);
 void unparseRegisterLoc(RegisterLoc* loc, StringBuilder* sb);
 void unparseMemoryLoc(MemoryLoc* loc, StringBuilder* sb);
 void unparseImmediateLoc(ImmediateLoc* loc, StringBuilder* sb);
 
 void InstructionUnparse(Instruction* instr, StringBuilder* sb) {
-	switch (instr->type) {
+	switch (instr->oc.type) {
 		case IT_MOV:
 			return unparseMov((MovInstruction*)instr, sb);
 		default:
 			// panic
-			fprintf(stderr, "Unhandled instruction type: %02x", instr->type);
+			fprintf(stderr, "Unhandled instruction type: %02x", instr->oc.type);
 			assert(false);
 	}
 	// panic
-	fprintf(stderr, "Unparse not defined for instruction type: %d", instr->type);
+	fprintf(stderr, "Unparse not defined for instruction type: %d", instr->oc.type);
 	assert(false);
 }
 
 void unparseMov(MovInstruction* instr, StringBuilder* sb) {
 	StringBuilderAppend(sb, "mov ");
-	unparseMovLoc(instr->dst, sb);
+	unparseLoc(&(instr->locs.dst), sb);
 	StringBuilderAppend(sb, ", ");
-	unparseMovLoc(instr->src, sb);
+	unparseLoc(&(instr->locs.src), sb);
 }
 
-void unparseMovLoc(MovLoc* loc, StringBuilder* sb) {
+void unparseLoc(Loc* loc, StringBuilder* sb) {
 	switch (loc->type) {
-		case ML_Register:
-			unparseRegisterLoc((RegisterLoc*)loc, sb);
+		case LOC_REG:
+			unparseRegisterLoc(&loc->reg, sb);
 			return;
-		case ML_Memory:
-			unparseMemoryLoc((MemoryLoc*)loc, sb);
+		case LOC_MEM:
+			unparseMemoryLoc(&loc->mem, sb);
 			return;
-		case ML_Immediate:
-			unparseImmediateLoc((ImmediateLoc*)loc, sb);
+		case LOC_IMM:
+			unparseImmediateLoc(&loc->imm, sb);
 			return;
 		default:
 			fprintf(stderr, "Unparse not defined for mov loc: %d", loc->type);
