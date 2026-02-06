@@ -7,29 +7,25 @@
 #include "common/types.h"
 
 typedef enum {
+	IT_UNKNOWN = 0,
 	IT_MOV,
 } InstructionType;
 
 typedef enum {
-	// Register/memory to/from register
-	OC_MOV_RM = 0x88,
-	// Immediate to register/memory
-	OC_MOV_IRM = 0xC6,
-	// Immediate to register
-	OC_MOV_IR = 0xB0,
-	// Memory to accumulator
-	OC_MOV_MA = 0xA0,
-	// Accumulator to memory
-	OC_MOV_AM = 0xA2,
-	// Register/memory to segment register
-	OC_MOV_RMS = 0x8E,
-	// Segment register to register/memory
-	OC_MOV_SRM = 0x8C,
+	ENC_NONE = 0,   // No operands
+	ENC_MODRM,      // Standard MOD + R/M byte
+	ENC_MODRM_IMM8, // MOD + R/M w/ 8-bit immediate
+	ENC_MODRM_IMM,  // MOD + R/M w/ immediate sized by W bit
+	ENC_ACC_MEM,    // Accumulator + direct address sized by W bit
+	ENC_REG_IMM,    // Register in low 3 bits w/ immediate sized by W bit
+} OpEncoding;
+
+typedef struct {
+	InstructionType type;
+	OpEncoding enc;
 } OpCode;
 
-static inline bool OpCodeIs(u8 byte, OpCode oc) {
-	return (byte & oc) == oc;
-}
+extern const OpCode OpCodeTable[];
 
 typedef struct {
 	InstructionType type;

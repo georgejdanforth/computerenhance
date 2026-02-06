@@ -89,12 +89,6 @@ static int decodeFile(File* f) {
 	return feof(f) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-static const usize N_MOV_OPCODES = 7;
-static const OpCode MOV_OPCODES[] = {
-		// Need to order these highest to lowest
-		OC_MOV_IRM, OC_MOV_IR, OC_MOV_AM, OC_MOV_MA, OC_MOV_RMS, OC_MOV_SRM, OC_MOV_RM,
-};
-
 static Instruction* decodeInstruction(File* f, Arena* allocator) {
 	DecodeContext ctx;
 	ctx.allocator = allocator;
@@ -106,15 +100,16 @@ static Instruction* decodeInstruction(File* f, Arena* allocator) {
 	}
 
 	u8 b1 = ctx.bytes[0];
+	OpCode oc = OpCodeTable[b1];
 
-	for (usize i = 0; i < N_MOV_OPCODES; i++) {
-		OpCode oc = MOV_OPCODES[i];
-		if (OpCodeIs(b1, oc)) {
+	switch (oc.type) {
+		case IT_MOV:
 			return (Instruction*)decodeMov(&ctx, oc);
-		}
+		default:
+			fprintf(stderr, "Unhandled opcode: %02x\n", b1);
+			return null;
 	}
 
-	fprintf(stderr, "Unhandled byte: %02x\n", b1);
 	return null;
 }
 
@@ -132,15 +127,15 @@ static MovInstruction* decodeMov(DecodeContext* ctx, OpCode oc) {
 	MovInstruction* instr = newMovInstruction(ctx->allocator, oc);
 
 	error err = 0;
-	switch (oc) {
-		case OC_MOV_RM:
+	switch (oc.enc) {
+		case ENC_MODRM:
 			decodeMovRM(ctx, instr, &err);
 			break;
-		case OC_MOV_IR:
+		case ENC_REG_IMM:
 			decodeMovIR(ctx, instr, &err);
 			break;
 		default:
-			fprintf(stderr, "Unhandled opcode: %02x\n", oc);
+			fprintf(stderr, "Unhandled opcode: %02x\n", ctx->bytes[0]);
 			assert(false);
 	}
 
