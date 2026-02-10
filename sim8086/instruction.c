@@ -452,7 +452,11 @@ void unparseMemoryLoc(MemoryLoc* loc, StringBuilder* sb) {
 void unparseImmediateLoc(ImmediateLoc* loc, StringBuilder* sb) {
 	char buf[8];
 	if (loc->isSigned) {
+		// Sign-extended immediate (s=1, w=1 case)
 		sprintf(buf, "%d", (i16)loc->data);
+	} else if (!loc->isWord && (loc->data & 0x80)) {
+		// 8-bit immediate with high bit set - display as signed
+		sprintf(buf, "%d", (i8)loc->data);
 	} else {
 		sprintf(buf, "%d", loc->data);
 	}

@@ -392,6 +392,7 @@ static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc, bool w) {
 
 static void decodeImmediateLoc(DecodeContext* ctx, ImmediateLoc* loc, bool s, bool w) {
 	loc->type = LOC_IMM;
+	loc->isWord = w;
 
 	if (s && w) {
 		// 8-bit immediate, sign-extended to 16-bit

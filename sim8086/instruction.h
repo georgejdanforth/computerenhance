@@ -86,6 +86,7 @@ typedef struct {
 typedef struct {
 	LocType type;
 	bool isSigned;
+	bool isWord;
 	u16 data;
 } ImmediateLoc;
 
