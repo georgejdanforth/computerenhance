@@ -37,7 +37,7 @@ static void decodeModRMImm(DecodeContext* ctx, LocPair* locs);
 static void decodeModRMImmSW(DecodeContext* ctx, LocPair* locs);
 static void decodeAccImm(DecodeContext* ctx, LocPair* locs);
 static void decodeRegImm(DecodeContext* ctx, LocPair* locs);
-static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc);
+static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc, bool w);
 static void decodeImmediateLoc(DecodeContext* ctx, ImmediateLoc* loc, bool s, bool w);
 
 int RunSim8086(int argc, char** argv) {
@@ -265,7 +265,7 @@ static void decodeModRM(DecodeContext* ctx, LocPair* locs) {
 		rmLoc.reg.reg = getRegister(b2 & 0x07, w);
 	} else {
 		// Memory mode
-		decodeMemoryLoc(ctx, &rmLoc.mem);
+		decodeMemoryLoc(ctx, &rmLoc.mem, w);
 	}
 
 	if (d) {
@@ -300,7 +300,7 @@ static void decodeModRMImm(DecodeContext* ctx, LocPair* locs) {
 		locs->dst.reg.type = LOC_REG;
 		locs->dst.reg.reg = getRegister(b2 & 0x07, w);
 	} else {
-		decodeMemoryLoc(ctx, &(locs->dst.mem));
+		decodeMemoryLoc(ctx, &(locs->dst.mem), w);
 	}
 
 	decodeImmediateLoc(ctx, &(locs->src.imm), false, w);
@@ -320,7 +320,7 @@ static void decodeModRMImmSW(DecodeContext* ctx, LocPair* locs) {
 		locs->dst.reg.type = LOC_REG;
 		locs->dst.reg.reg = getRegister(b2 & 0x07, w);
 	} else {
-		decodeMemoryLoc(ctx, &(locs->dst.mem));
+		decodeMemoryLoc(ctx, &(locs->dst.mem), w);
 	}
 
 	decodeImmediateLoc(ctx, &(locs->src.imm), s, w);
@@ -337,13 +337,14 @@ static void decodeAccImm(DecodeContext* ctx, LocPair* locs) {
 	locs->src.imm.isSigned = false;
 };
 
-static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc) {
+static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc, bool w) {
 #define SET_EA(e)                                                                       \
 	loc->ea = e;                                                                          \
 	break;
 
 	loc->type = LOC_MEM;
 	loc->disp = 0;
+	loc->isWord = w;
 
 	u8 b2 = ctx->bytes[1];
 

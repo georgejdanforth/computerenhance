@@ -93,6 +93,7 @@ typedef struct {
 	LocType type;
 	EffectiveAddress ea;
 	u16 disp;
+	bool isWord;
 } MemoryLoc;
 
 typedef union {

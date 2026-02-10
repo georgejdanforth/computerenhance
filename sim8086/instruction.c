@@ -347,6 +347,10 @@ void InstructionUnparse(Instruction* instr, StringBuilder* sb) {
 }
 
 void unparseLocPair(LocPair* locs, StringBuilder* sb) {
+	// Output "byte" or "word" when dst is memory and src is immediate
+	if (locs->dst.type == LOC_MEM && locs->src.type == LOC_IMM) {
+		StringBuilderAppend(sb, locs->dst.mem.isWord ? "word " : "byte ");
+	}
 	unparseLoc(&locs->dst, sb);
 	StringBuilderAppend(sb, ", ");
 	unparseLoc(&locs->src, sb);
