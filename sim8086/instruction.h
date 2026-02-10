@@ -11,6 +11,26 @@ typedef enum {
 
 	IT_ADD,
 	IT_CMP,
+	IT_JA,
+	IT_JAE,
+	IT_JB,
+	IT_JBE,
+	IT_JCXZ,
+	IT_JE,
+	IT_JG,
+	IT_JGE,
+	IT_JL,
+	IT_JLE,
+	IT_JNE,
+	IT_JNO,
+	IT_JNS,
+	IT_JO,
+	IT_JP,
+	IT_JPO,
+	IT_JS,
+	IT_LOOP,
+	IT_LOOPNZ,
+	IT_LOOPZ,
 	IT_MOV,
 	IT_SUB,
 
@@ -26,6 +46,7 @@ typedef enum {
 	ENC_ACC_MEM,      // Accumulator + direct address sized by W bit
 	ENC_ACC_IMM,      // Immediate to accumulator w/ immediate sized by w bit
 	ENC_REG_IMM,      // Register in low 3 bits w/ immediate sized by W bit
+	ENC_IP_INC8,      // Signed 8-bit displacement following opcode
 } OpEncoding;
 
 typedef enum { AX, BX, CX, DX, SP, BP, SI, DI, AL, AH, BL, BH, CL, CH, DL, DH } Register;
@@ -94,9 +115,17 @@ typedef struct {
 typedef LocPairInstruction MovInstruction;
 typedef LocPairInstruction AddInstruction;
 
+typedef struct {
+	OpCode oc;
+	i8 disp;
+} SignedDisplacementInstruction;
+
+typedef SignedDisplacementInstruction JmpInstruction;
+
 typedef union {
 	OpCode oc;
 	LocPairInstruction locPair;
+	SignedDisplacementInstruction signedDisp;
 } Instruction;
 
 void InstructionUnparse(Instruction* instr, StringBuilder* sb);

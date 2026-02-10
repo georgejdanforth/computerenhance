@@ -116,22 +116,22 @@ const OpCode OpCodeTable[] = {
 		[0x6D] = {0},
 		[0x6E] = {0},
 		[0x6F] = {0},
-		[0x70] = {0},
-		[0x71] = {0},
-		[0x72] = {0},
-		[0x73] = {0},
-		[0x74] = {0},
-		[0x75] = {0},
-		[0x76] = {0},
-		[0x77] = {0},
-		[0x78] = {0},
-		[0x79] = {0},
-		[0x7A] = {0},
-		[0x7B] = {0},
-		[0x7C] = {0},
-		[0x7D] = {0},
-		[0x7E] = {0},
-		[0x7F] = {0},
+		[0x70] = {IT_JO, ENC_IP_INC8},
+		[0x71] = {IT_JNO, ENC_IP_INC8},
+		[0x72] = {IT_JB, ENC_IP_INC8},
+		[0x73] = {IT_JAE, ENC_IP_INC8},
+		[0x74] = {IT_JE, ENC_IP_INC8},
+		[0x75] = {IT_JNE, ENC_IP_INC8},
+		[0x76] = {IT_JBE, ENC_IP_INC8},
+		[0x77] = {IT_JA, ENC_IP_INC8},
+		[0x78] = {IT_JS, ENC_IP_INC8},
+		[0x79] = {IT_JNS, ENC_IP_INC8},
+		[0x7A] = {IT_JP, ENC_IP_INC8},
+		[0x7B] = {IT_JPO, ENC_IP_INC8},
+		[0x7C] = {IT_JL, ENC_IP_INC8},
+		[0x7D] = {IT_JGE, ENC_IP_INC8},
+		[0x7E] = {IT_JLE, ENC_IP_INC8},
+		[0x7F] = {IT_JG, ENC_IP_INC8},
 		[0x80] = {IT_GROUP_1, ENC_MODRM_IMM_SW},
 		[0x81] = {IT_GROUP_1, ENC_MODRM_IMM_SW},
 		[0x82] = {IT_GROUP_1, ENC_MODRM_IMM_SW},
@@ -228,10 +228,10 @@ const OpCode OpCodeTable[] = {
 		[0xDD] = {0},
 		[0xDE] = {0},
 		[0xDF] = {0},
-		[0xE0] = {0},
-		[0xE1] = {0},
-		[0xE2] = {0},
-		[0xE3] = {0},
+		[0xE0] = {IT_LOOPNZ, ENC_IP_INC8},
+		[0xE1] = {IT_LOOPZ, ENC_IP_INC8},
+		[0xE2] = {IT_LOOP, ENC_IP_INC8},
+		[0xE3] = {IT_JCXZ, ENC_IP_INC8},
 		[0xE4] = {0},
 		[0xE5] = {0},
 		[0xE6] = {0},
@@ -263,6 +263,7 @@ const OpCode OpCodeTable[] = {
 };
 
 void unparseLocPair(LocPair* instr, StringBuilder* sb);
+void unparseSignedDisplacement(SignedDisplacementInstruction* instr, StringBuilder* sb);
 void unparseLoc(Loc* loc, StringBuilder* sb);
 void unparseRegisterLoc(RegisterLoc* loc, StringBuilder* sb);
 void unparseMemoryLoc(MemoryLoc* loc, StringBuilder* sb);
@@ -279,6 +280,26 @@ void InstructionUnparse(Instruction* instr, StringBuilder* sb) {
 		case IT_CMP: APPEND_INSTR("cmp");
 		case IT_MOV: APPEND_INSTR("mov");
 		case IT_SUB: APPEND_INSTR("sub");
+		case IT_JA: APPEND_INSTR("ja");
+		case IT_JAE: APPEND_INSTR("jae");
+		case IT_JB: APPEND_INSTR("jb");
+		case IT_JBE: APPEND_INSTR("jbe");
+		case IT_JCXZ: APPEND_INSTR("jcxz");
+		case IT_JE: APPEND_INSTR("je");
+		case IT_JG: APPEND_INSTR("jg");
+		case IT_JGE: APPEND_INSTR("jge");
+		case IT_JL: APPEND_INSTR("jl");
+		case IT_JLE: APPEND_INSTR("jle");
+		case IT_JNE: APPEND_INSTR("jne");
+		case IT_JNO: APPEND_INSTR("jno");
+		case IT_JNS: APPEND_INSTR("jns");
+		case IT_JO: APPEND_INSTR("jo");
+		case IT_JP: APPEND_INSTR("jp");
+		case IT_JPO: APPEND_INSTR("jpo");
+		case IT_JS: APPEND_INSTR("js");
+		case IT_LOOP: APPEND_INSTR("loop");
+		case IT_LOOPNZ: APPEND_INSTR("loopnz");
+		case IT_LOOPZ: APPEND_INSTR("loopz");
 		default:
 			// panic
 			fprintf(stderr, "Unhandled instruction type: %02x\n", instr->oc.type);
@@ -292,6 +313,27 @@ void InstructionUnparse(Instruction* instr, StringBuilder* sb) {
 		case IT_MOV:
 		case IT_SUB:
 			return unparseLocPair(&(instr->locPair.locs), sb);
+		case IT_JA:
+		case IT_JAE:
+		case IT_JB:
+		case IT_JBE:
+		case IT_JCXZ:
+		case IT_JE:
+		case IT_JG:
+		case IT_JGE:
+		case IT_JL:
+		case IT_JLE:
+		case IT_JNE:
+		case IT_JNO:
+		case IT_JNS:
+		case IT_JO:
+		case IT_JP:
+		case IT_JPO:
+		case IT_JS:
+		case IT_LOOP:
+		case IT_LOOPNZ:
+		case IT_LOOPZ:
+			return unparseSignedDisplacement(&instr->signedDisp, sb);
 		default:
 			// panic
 			fprintf(stderr, "Unhandled instruction type: %02x\n", instr->oc.type);
@@ -308,6 +350,12 @@ void unparseLocPair(LocPair* locs, StringBuilder* sb) {
 	unparseLoc(&locs->dst, sb);
 	StringBuilderAppend(sb, ", ");
 	unparseLoc(&locs->src, sb);
+}
+
+void unparseSignedDisplacement(SignedDisplacementInstruction* instr, StringBuilder* sb) {
+	char buf[4];
+	sprintf(buf, "%d", instr->disp);
+	StringBuilderAppend(sb, buf);
 }
 
 void unparseLoc(Loc* loc, StringBuilder* sb) {

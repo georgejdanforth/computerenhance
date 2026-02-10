@@ -30,6 +30,8 @@ static void printUsage(void);
 static int decodeFile(File* f);
 static Instruction decodeInstruction(DecodeContext* ctx);
 static void decodeLocPair(DecodeContext* ctx, LocPairInstruction* instr);
+static void decodeSignedDisplacement(DecodeContext* ctx,
+                                     SignedDisplacementInstruction* instr);
 static void decodeModRM(DecodeContext* ctx, LocPair* locs);
 static void decodeModRMImm(DecodeContext* ctx, LocPair* locs);
 static void decodeModRMImmSW(DecodeContext* ctx, LocPair* locs);
@@ -124,6 +126,28 @@ static Instruction decodeInstruction(DecodeContext* ctx) {
 		case IT_GROUP_1:
 			decodeLocPair(ctx, &instr.locPair);
 			break;
+		case IT_JA:
+		case IT_JAE:
+		case IT_JB:
+		case IT_JBE:
+		case IT_JCXZ:
+		case IT_JE:
+		case IT_JG:
+		case IT_JGE:
+		case IT_JL:
+		case IT_JLE:
+		case IT_JNE:
+		case IT_JNO:
+		case IT_JNS:
+		case IT_JO:
+		case IT_JP:
+		case IT_JPO:
+		case IT_JS:
+		case IT_LOOP:
+		case IT_LOOPNZ:
+		case IT_LOOPZ:
+			decodeSignedDisplacement(ctx, &instr.signedDisp);
+			break;
 		default:
 			fprintf(stderr, "Unhandled opcode: %02x\n", b1);
 			ctx->err = ERR_UNKNOWN;
@@ -176,6 +200,15 @@ static void decodeLocPair(DecodeContext* ctx, LocPairInstruction* instr) {
 
 #undef UPDATE_INSTR
 #undef DECODE
+}
+
+static void decodeSignedDisplacement(DecodeContext* ctx,
+                                     SignedDisplacementInstruction* instr) {
+	if (read(ctx, 1) != 0) {
+		ERROR(ERR_UNKNOWN);
+	}
+
+	instr->disp = ctx->bytes[1];
 }
 
 static Register getRegister(u8 b, bool w) {
