@@ -8,16 +8,24 @@
 
 typedef enum {
 	IT_UNKNOWN = 0,
+
+	IT_ADD,
+	IT_CMP,
 	IT_MOV,
+	IT_SUB,
+
+	IT_GROUP_1, // ADD, ADC, SUB, SBB, CMP, XOR, OR, AND
 } InstructionType;
 
 typedef enum {
-	ENC_NONE = 0,   // No operands
-	ENC_MODRM,      // Standard MOD + R/M byte
-	ENC_MODRM_IMM8, // MOD + R/M w/ 8-bit immediate
-	ENC_MODRM_IMM,  // MOD + R/M w/ immediate sized by W bit
-	ENC_ACC_MEM,    // Accumulator + direct address sized by W bit
-	ENC_REG_IMM,    // Register in low 3 bits w/ immediate sized by W bit
+	ENC_NONE = 0,     // No operands
+	ENC_MODRM,        // Standard MOD + R/M byte
+	ENC_MODRM_IMM8,   // MOD + R/M w/ 8-bit immediate
+	ENC_MODRM_IMM,    // MOD + R/M w/ immediate sized by W bit
+	ENC_MODRM_IMM_SW, // MOD + R/M w/ immediate sized by W bit and with sign-extension bit
+	ENC_ACC_MEM,      // Accumulator + direct address sized by W bit
+	ENC_ACC_IMM,      // Immediate to accumulator w/ immediate sized by w bit
+	ENC_REG_IMM,      // Register in low 3 bits w/ immediate sized by W bit
 } OpEncoding;
 
 typedef enum { AX, BX, CX, DX, SP, BP, SI, DI, AL, AH, BL, BH, CL, CH, DL, DH } Register;
@@ -56,6 +64,7 @@ typedef struct {
 
 typedef struct {
 	LocType type;
+	bool isSigned;
 	u16 data;
 } ImmediateLoc;
 
@@ -80,11 +89,14 @@ typedef struct {
 typedef struct {
 	OpCode oc;
 	LocPair locs;
-} MovInstruction;
+} LocPairInstruction;
+
+typedef LocPairInstruction MovInstruction;
+typedef LocPairInstruction AddInstruction;
 
 typedef union {
 	OpCode oc;
-	MovInstruction mov;
+	LocPairInstruction locPair;
 } Instruction;
 
 void InstructionUnparse(Instruction* instr, StringBuilder* sb);

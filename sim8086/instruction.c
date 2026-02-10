@@ -4,12 +4,12 @@
 #include "instruction.h"
 
 const OpCode OpCodeTable[] = {
-		[0x00] = {0},
-		[0x01] = {0},
-		[0x02] = {0},
-		[0x03] = {0},
-		[0x04] = {0},
-		[0x05] = {0},
+		[0x00] = {IT_ADD, ENC_MODRM},
+		[0x01] = {IT_ADD, ENC_MODRM},
+		[0x02] = {IT_ADD, ENC_MODRM},
+		[0x03] = {IT_ADD, ENC_MODRM},
+		[0x04] = {IT_ADD, ENC_ACC_IMM},
+		[0x05] = {IT_ADD, ENC_ACC_IMM},
 		[0x06] = {0},
 		[0x07] = {0},
 		[0x08] = {0},
@@ -44,12 +44,12 @@ const OpCode OpCodeTable[] = {
 		[0x25] = {0},
 		[0x26] = {0},
 		[0x27] = {0},
-		[0x28] = {0},
-		[0x29] = {0},
-		[0x2A] = {0},
-		[0x2B] = {0},
-		[0x2C] = {0},
-		[0x2D] = {0},
+		[0x28] = {IT_SUB, ENC_MODRM},
+		[0x29] = {IT_SUB, ENC_MODRM},
+		[0x2A] = {IT_SUB, ENC_MODRM},
+		[0x2B] = {IT_SUB, ENC_MODRM},
+		[0x2C] = {IT_SUB, ENC_ACC_IMM},
+		[0x2D] = {IT_SUB, ENC_ACC_IMM},
 		[0x2E] = {0},
 		[0x2F] = {0},
 		[0x30] = {0},
@@ -60,12 +60,12 @@ const OpCode OpCodeTable[] = {
 		[0x35] = {0},
 		[0x36] = {0},
 		[0x37] = {0},
-		[0x38] = {0},
-		[0x39] = {0},
-		[0x3A] = {0},
-		[0x3B] = {0},
-		[0x3C] = {0},
-		[0x3D] = {0},
+		[0x38] = {IT_CMP, ENC_MODRM},
+		[0x39] = {IT_CMP, ENC_MODRM},
+		[0x3A] = {IT_CMP, ENC_MODRM},
+		[0x3B] = {IT_CMP, ENC_MODRM},
+		[0x3C] = {IT_CMP, ENC_ACC_IMM},
+		[0x3D] = {IT_CMP, ENC_ACC_IMM},
 		[0x3E] = {0},
 		[0x3F] = {0},
 		[0x40] = {0},
@@ -132,10 +132,10 @@ const OpCode OpCodeTable[] = {
 		[0x7D] = {0},
 		[0x7E] = {0},
 		[0x7F] = {0},
-		[0x80] = {0},
-		[0x81] = {0},
-		[0x82] = {0},
-		[0x83] = {0},
+		[0x80] = {IT_GROUP_1, ENC_MODRM_IMM_SW},
+		[0x81] = {IT_GROUP_1, ENC_MODRM_IMM_SW},
+		[0x82] = {IT_GROUP_1, ENC_MODRM_IMM_SW},
+		[0x83] = {IT_GROUP_1, ENC_MODRM_IMM_SW},
 		[0x84] = {0},
 		[0x85] = {0},
 		[0x86] = {0},
@@ -262,31 +262,52 @@ const OpCode OpCodeTable[] = {
 		[0xFF] = {0},
 };
 
-void unparseMov(MovInstruction* instr, StringBuilder* sb);
+void unparseLocPair(LocPair* instr, StringBuilder* sb);
 void unparseLoc(Loc* loc, StringBuilder* sb);
 void unparseRegisterLoc(RegisterLoc* loc, StringBuilder* sb);
 void unparseMemoryLoc(MemoryLoc* loc, StringBuilder* sb);
 void unparseImmediateLoc(ImmediateLoc* loc, StringBuilder* sb);
 
 void InstructionUnparse(Instruction* instr, StringBuilder* sb) {
+#define APPEND_INSTR(i)                                                                 \
+	StringBuilderAppend(sb, i " ");                                                       \
+	break;
+
+	// clang-format off
 	switch (instr->oc.type) {
-		case IT_MOV:
-			return unparseMov((MovInstruction*)instr, sb);
+		case IT_ADD: APPEND_INSTR("add");
+		case IT_CMP: APPEND_INSTR("cmp");
+		case IT_MOV: APPEND_INSTR("mov");
+		case IT_SUB: APPEND_INSTR("sub");
 		default:
 			// panic
-			fprintf(stderr, "Unhandled instruction type: %02x", instr->oc.type);
+			fprintf(stderr, "Unhandled instruction type: %02x\n", instr->oc.type);
+			assert(false);
+	}
+	// clang-format on
+
+	switch (instr->oc.type) {
+		case IT_ADD:
+		case IT_CMP:
+		case IT_MOV:
+		case IT_SUB:
+			return unparseLocPair(&(instr->locPair.locs), sb);
+		default:
+			// panic
+			fprintf(stderr, "Unhandled instruction type: %02x\n", instr->oc.type);
 			assert(false);
 	}
 	// panic
-	fprintf(stderr, "Unparse not defined for instruction type: %d", instr->oc.type);
+	fprintf(stderr, "Unparse not defined for instruction type: %d\n", instr->oc.type);
 	assert(false);
+
+#undef APPEND_INSTR
 }
 
-void unparseMov(MovInstruction* instr, StringBuilder* sb) {
-	StringBuilderAppend(sb, "mov ");
-	unparseLoc(&(instr->locs.dst), sb);
+void unparseLocPair(LocPair* locs, StringBuilder* sb) {
+	unparseLoc(&locs->dst, sb);
 	StringBuilderAppend(sb, ", ");
-	unparseLoc(&(instr->locs.src), sb);
+	unparseLoc(&locs->src, sb);
 }
 
 void unparseLoc(Loc* loc, StringBuilder* sb) {
@@ -359,11 +380,14 @@ void unparseMemoryLoc(MemoryLoc* loc, StringBuilder* sb) {
 	// clang-format on
 
 	if (loc->disp != 0) {
-		char buf[9];
+		char buf[12];
+		i16 disp = (i16)loc->disp;
 		if (loc->ea == EA_NONE) {
 			sprintf(buf, "%d", loc->disp);
+		} else if (disp < 0) {
+			sprintf(buf, " - %d", -disp);
 		} else {
-			sprintf(buf, " + %d", loc->disp);
+			sprintf(buf, " + %d", disp);
 		}
 		StringBuilderAppend(sb, buf);
 	}
@@ -374,7 +398,11 @@ void unparseMemoryLoc(MemoryLoc* loc, StringBuilder* sb) {
 }
 
 void unparseImmediateLoc(ImmediateLoc* loc, StringBuilder* sb) {
-	char buf[6];
-	sprintf(buf, "%d", loc->data);
+	char buf[8];
+	if (loc->isSigned) {
+		sprintf(buf, "%d", (i16)loc->data);
+	} else {
+		sprintf(buf, "%d", loc->data);
+	}
 	StringBuilderAppend(sb, buf);
 }

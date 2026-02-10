@@ -29,11 +29,14 @@ typedef struct {
 static void printUsage(void);
 static int decodeFile(File* f);
 static Instruction decodeInstruction(DecodeContext* ctx);
-static void decodeMov(DecodeContext* ctx, MovInstruction* instr);
+static void decodeLocPair(DecodeContext* ctx, LocPairInstruction* instr);
 static void decodeModRM(DecodeContext* ctx, LocPair* locs);
+static void decodeModRMImm(DecodeContext* ctx, LocPair* locs);
+static void decodeModRMImmSW(DecodeContext* ctx, LocPair* locs);
+static void decodeAccImm(DecodeContext* ctx, LocPair* locs);
 static void decodeRegImm(DecodeContext* ctx, LocPair* locs);
 static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc);
-static void decodeImmediateLoc(DecodeContext* ctx, ImmediateLoc* loc, bool w, usize idx);
+static void decodeImmediateLoc(DecodeContext* ctx, ImmediateLoc* loc, bool s, bool w);
 
 int RunSim8086(int argc, char** argv) {
 	if (argc != 3) {
@@ -114,8 +117,12 @@ static Instruction decodeInstruction(DecodeContext* ctx) {
 	instr.oc = OpCodeTable[b1];
 
 	switch (instr.oc.type) {
+		case IT_ADD:
+		case IT_CMP:
 		case IT_MOV:
-			decodeMov(ctx, &instr.mov);
+		case IT_SUB:
+		case IT_GROUP_1:
+			decodeLocPair(ctx, &instr.locPair);
 			break;
 		default:
 			fprintf(stderr, "Unhandled opcode: %02x\n", b1);
@@ -126,18 +133,49 @@ static Instruction decodeInstruction(DecodeContext* ctx) {
 	return instr;
 }
 
-static void decodeMov(DecodeContext* ctx, MovInstruction* instr) {
+static void decodeLocPair(DecodeContext* ctx, LocPairInstruction* instr) {
+#define DECODE(fn)                                                                      \
+	fn(ctx, &instr->locs);                                                                \
+	break;
+
+#define UPDATE_INSTR(i)                                                                 \
+	instr->oc.type = i;                                                                   \
+	break;
+
+	// clang-format off
 	switch (instr->oc.enc) {
-		case ENC_MODRM:
-			decodeModRM(ctx, &instr->locs);
-			break;
-		case ENC_REG_IMM:
-			decodeRegImm(ctx, &instr->locs);
-			break;
+		case ENC_MODRM: DECODE(decodeModRM);
+		case ENC_REG_IMM: DECODE(decodeRegImm);
+		case ENC_MODRM_IMM: DECODE(decodeModRMImm);
+		case ENC_MODRM_IMM_SW: DECODE(decodeModRMImmSW);
+		case ENC_ACC_IMM: DECODE(decodeAccImm);
 		default:
 			fprintf(stderr, "Unhandled opcode: %02x\n", ctx->bytes[0]);
 			assert(false);
 	}
+	// clang-format on
+
+	// clang-format off
+	if (instr->oc.type == IT_GROUP_1) {
+		u8 b = (ctx->bytes[1] & 0x38) >> 3;
+		switch (b) {
+			case 0x00: UPDATE_INSTR(IT_ADD);
+			case 0x01: UPDATE_INSTR(IT_UNKNOWN); // OR
+			case 0x02: UPDATE_INSTR(IT_UNKNOWN); // ADC
+			case 0x03: UPDATE_INSTR(IT_UNKNOWN); // SBB
+			case 0x04: UPDATE_INSTR(IT_UNKNOWN); // AND
+			case 0x05: UPDATE_INSTR(IT_SUB);
+			case 0x06: UPDATE_INSTR(IT_UNKNOWN); // XOR (?)
+			case 0x07: UPDATE_INSTR(IT_CMP);
+			default:
+				fprintf(stderr, "Unknown bit sequence for group 1: %02x\n", b);
+				assert(false);
+		}
+	}
+	// clang-format on
+
+#undef UPDATE_INSTR
+#undef DECODE
 }
 
 static Register getRegister(u8 b, bool w) {
@@ -185,7 +223,7 @@ static void decodeModRM(DecodeContext* ctx, LocPair* locs) {
 
 	Loc regLoc;
 	regLoc.reg.type = LOC_REG;
-	regLoc.reg.reg = getRegister((b2 & 0x39) >> 3, w);
+	regLoc.reg.reg = getRegister((b2 & 0x38) >> 3, w);
 
 	Loc rmLoc;
 	if ((b2 & 0xC0) == 0xC0) {
@@ -213,8 +251,58 @@ static void decodeRegImm(DecodeContext* ctx, LocPair* locs) {
 	locs->dst.reg.type = LOC_REG;
 	locs->dst.reg.reg = getRegister(b1 & 0x07, w);
 
-	decodeImmediateLoc(ctx, &(locs->src.imm), w, 1);
+	decodeImmediateLoc(ctx, &(locs->src.imm), false, w);
 }
+
+static void decodeModRMImm(DecodeContext* ctx, LocPair* locs) {
+	if (read(ctx, 1) != 0) {
+		ERROR(ERR_UNKNOWN);
+	}
+
+	u8 b1 = ctx->bytes[0];
+	u8 b2 = ctx->bytes[1];
+	bool w = (b1 & 0x01) == 0x01;
+
+	if ((b2 & 0xC0) == 0xC0) {
+		locs->dst.reg.type = LOC_REG;
+		locs->dst.reg.reg = getRegister(b2 & 0x07, w);
+	} else {
+		decodeMemoryLoc(ctx, &(locs->dst.mem));
+	}
+
+	decodeImmediateLoc(ctx, &(locs->src.imm), false, w);
+}
+
+static void decodeModRMImmSW(DecodeContext* ctx, LocPair* locs) {
+	if (read(ctx, 1) != 0) {
+		ERROR(ERR_UNKNOWN);
+	}
+
+	u8 b1 = ctx->bytes[0];
+	u8 b2 = ctx->bytes[1];
+	bool s = (b1 & 0x02) == 0x02;
+	bool w = (b1 & 0x01) == 0x01;
+
+	if ((b2 & 0xC0) == 0xC0) {
+		locs->dst.reg.type = LOC_REG;
+		locs->dst.reg.reg = getRegister(b2 & 0x07, w);
+	} else {
+		decodeMemoryLoc(ctx, &(locs->dst.mem));
+	}
+
+	decodeImmediateLoc(ctx, &(locs->src.imm), s, w);
+}
+
+static void decodeAccImm(DecodeContext* ctx, LocPair* locs) {
+	bool w = (ctx->bytes[0] & 0x01) == 0x01;
+
+	locs->dst.reg.type = LOC_REG;
+	locs->dst.reg.reg = w ? AX : AL;
+
+	decodeImmediateLoc(ctx, &(locs->src.imm), false, w);
+	locs->src.imm.type = LOC_IMM;
+	locs->src.imm.isSigned = false;
+};
 
 static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc) {
 #define SET_EA(e)                                                                       \
@@ -253,12 +341,12 @@ static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc) {
 		if(read(ctx, 1) != 0) {
 			ERROR(ERR_UNKNOWN);
 		}
-		loc->disp = (u16)(ctx->bytes[2]);
+		loc->disp = (u16)(i16)(i8)(ctx->bytes[ctx->len - 1]);
 	} else if (mode == 0x80) {
 		if(read(ctx, 2) != 0) {
 			ERROR(ERR_UNKNOWN);
 		}
-		loc->disp = ((u16)(ctx->bytes[2])) | ((u16)(ctx->bytes[3]) << 8);
+		loc->disp = ((u16)(ctx->bytes[ctx->len - 2])) | ((u16)(ctx->bytes[ctx->len - 1]) << 8);
 	} else {
 		// panic
 		fprintf(stderr, "Unexpected mode value: %02x", mode);
@@ -268,18 +356,29 @@ static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc) {
 #undef SET_EA
 }
 
-static void decodeImmediateLoc(DecodeContext* ctx, ImmediateLoc* loc, bool w, usize idx) {
+static void decodeImmediateLoc(DecodeContext* ctx, ImmediateLoc* loc, bool s, bool w) {
 	loc->type = LOC_IMM;
 
-	if (w) {
-		if(read(ctx, 2) != 0) {
-			ERROR(ERR_UNKNOWN);
-		}
-		loc->data = ((u16)(ctx->bytes[idx])) | ((u16)(ctx->bytes[idx + 1]) << 8);
-	} else {
+	if (s && w) {
+		// 8-bit immediate, sign-extended to 16-bit
 		if (read(ctx, 1) != 0) {
 			ERROR(ERR_UNKNOWN);
-		};
-		loc->data = (u16)(ctx->bytes[idx]);
+		}
+		loc->data = (u16)(i16)(i8)(ctx->bytes[ctx->len - 1]);
+		loc->isSigned = true;
+	} else if (w) {
+		// 16-bit immediate
+		if (read(ctx, 2) != 0) {
+			ERROR(ERR_UNKNOWN);
+		}
+		loc->data = ((u16)ctx->bytes[ctx->len - 2]) | ((u16)ctx->bytes[ctx->len - 1] << 8);
+		loc->isSigned = false;
+	} else {
+		// 8-bit immediate
+		if (read(ctx, 1) != 0) {
+			ERROR(ERR_UNKNOWN);
+		}
+		loc->data = (u16)ctx->bytes[ctx->len - 1];
+		loc->isSigned = false;
 	}
 }
