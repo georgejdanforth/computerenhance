@@ -130,6 +130,12 @@ typedef union {
 	SignedDisplacementInstruction signedDisp;
 } Instruction;
 
+typedef struct {
+	Instruction instr;
+	bool eof;
+} DecodeResult;
+
+DecodeResult InstructionDecodeFromFile(File* f);
 void InstructionUnparse(Instruction* instr, StringBuilder* sb);
 
 #endif // __INSTRUCTION_H__

@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "instruction.h"
 
@@ -261,6 +262,308 @@ const OpCode OpCodeTable[] = {
 		[0xFE] = {0},
 		[0xFF] = {0},
 };
+
+// ============================================================================
+// Decoding
+// ============================================================================
+
+typedef struct {
+	File* f;
+	u8 len;
+	u8 bytes[6];
+} DecodeContext;
+
+static void readBytes(DecodeContext* ctx, usize n) {
+	usize nread = fread(ctx->bytes + ctx->len, sizeof(u8), n, ctx->f);
+	ctx->len += nread;
+	assert(nread == n);
+}
+
+static Register getRegister(u8 b, bool w) {
+	if (w) {
+		// clang-format off
+		switch (b) {
+			case 0x00: return AX;
+			case 0x01: return CX;
+			case 0x02: return DX;
+			case 0x03: return BX;
+			case 0x04: return SP;
+			case 0x05: return BP;
+			case 0x06: return SI;
+			case 0x07: return DI;
+		}
+		// clang-format on
+	} else {
+		// clang-format off
+		switch (b) {
+			case 0x00: return AL;
+			case 0x01: return CL;
+			case 0x02: return DL;
+			case 0x03: return BL;
+			case 0x04: return AH;
+			case 0x05: return CH;
+			case 0x06: return DH;
+			case 0x07: return BH;
+		}
+		// clang-format on
+	}
+	fprintf(stderr, "Unhandled register (b=%02x, w=%d)\n", b, w);
+	assert(false);
+}
+
+static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc, bool w) {
+#define SET_EA(e)                                                                       \
+	loc->ea = e;                                                                          \
+	break;
+
+	loc->type = LOC_MEM;
+	loc->disp = 0;
+	loc->isWord = w;
+
+	u8 b2 = ctx->bytes[1];
+
+	// clang-format off
+	switch (b2 & 0x07) {
+		case 0x00: SET_EA(EA_BX_SI);
+		case 0x01: SET_EA(EA_BX_DI);
+		case 0x02: SET_EA(EA_BP_SI);
+		case 0x03: SET_EA(EA_BP_DI);
+		case 0x04: SET_EA(EA_SI);
+		case 0x05: SET_EA(EA_DI);
+		case 0x06: SET_EA(EA_BP);
+		case 0x07: SET_EA(EA_BX);
+	}
+	// clang-format on
+
+	u8 mode = b2 & 0xC0;
+	if (mode == 0x00 && loc->ea == EA_BP) {
+		loc->ea = EA_NONE;
+		mode = 0x80;
+	}
+	if (mode == 0x00) {
+		return;
+	} else if (mode == 0x40) {
+		readBytes(ctx, 1);
+		loc->disp = (u16)(i16)(i8)(ctx->bytes[ctx->len - 1]);
+	} else if (mode == 0x80) {
+		readBytes(ctx, 2);
+		loc->disp = ((u16)(ctx->bytes[ctx->len - 2])) | ((u16)(ctx->bytes[ctx->len - 1]) << 8);
+	} else {
+		fprintf(stderr, "Unexpected mode value: %02x", mode);
+		assert(false);
+	}
+
+#undef SET_EA
+}
+
+static void decodeImmediateLoc(DecodeContext* ctx, ImmediateLoc* loc, bool s, bool w) {
+	loc->type = LOC_IMM;
+	loc->isWord = w;
+
+	if (s && w) {
+		readBytes(ctx, 1);
+		loc->data = (u16)(i16)(i8)(ctx->bytes[ctx->len - 1]);
+		loc->isSigned = true;
+	} else if (w) {
+		readBytes(ctx, 2);
+		loc->data = ((u16)ctx->bytes[ctx->len - 2]) | ((u16)ctx->bytes[ctx->len - 1] << 8);
+		loc->isSigned = false;
+	} else {
+		readBytes(ctx, 1);
+		loc->data = (u16)ctx->bytes[ctx->len - 1];
+		loc->isSigned = false;
+	}
+}
+
+static void decodeModRM(DecodeContext* ctx, LocPair* locs) {
+	readBytes(ctx, 1);
+
+	u8 b1 = ctx->bytes[0];
+	u8 b2 = ctx->bytes[1];
+	bool d = (b1 & 0x02) == 0x02;
+	bool w = (b1 & 0x01) == 0x01;
+
+	Loc regLoc;
+	regLoc.reg.type = LOC_REG;
+	regLoc.reg.reg = getRegister((b2 & 0x38) >> 3, w);
+
+	Loc rmLoc;
+	if ((b2 & 0xC0) == 0xC0) {
+		rmLoc.reg.type = LOC_REG;
+		rmLoc.reg.reg = getRegister(b2 & 0x07, w);
+	} else {
+		decodeMemoryLoc(ctx, &rmLoc.mem, w);
+	}
+
+	if (d) {
+		locs->dst = regLoc;
+		locs->src = rmLoc;
+	} else {
+		locs->dst = rmLoc;
+		locs->src = regLoc;
+	}
+}
+
+static void decodeRegImm(DecodeContext* ctx, LocPair* locs) {
+	u8 b1 = ctx->bytes[0];
+	bool w = (b1 & 0x08) == 0x08;
+
+	locs->dst.reg.type = LOC_REG;
+	locs->dst.reg.reg = getRegister(b1 & 0x07, w);
+
+	decodeImmediateLoc(ctx, &(locs->src.imm), false, w);
+}
+
+static void decodeModRMImm(DecodeContext* ctx, LocPair* locs) {
+	readBytes(ctx, 1);
+
+	u8 b1 = ctx->bytes[0];
+	u8 b2 = ctx->bytes[1];
+	bool w = (b1 & 0x01) == 0x01;
+
+	if ((b2 & 0xC0) == 0xC0) {
+		locs->dst.reg.type = LOC_REG;
+		locs->dst.reg.reg = getRegister(b2 & 0x07, w);
+	} else {
+		decodeMemoryLoc(ctx, &(locs->dst.mem), w);
+	}
+
+	decodeImmediateLoc(ctx, &(locs->src.imm), false, w);
+}
+
+static void decodeModRMImmSW(DecodeContext* ctx, LocPair* locs) {
+	readBytes(ctx, 1);
+
+	u8 b1 = ctx->bytes[0];
+	u8 b2 = ctx->bytes[1];
+	bool s = (b1 & 0x02) == 0x02;
+	bool w = (b1 & 0x01) == 0x01;
+
+	if ((b2 & 0xC0) == 0xC0) {
+		locs->dst.reg.type = LOC_REG;
+		locs->dst.reg.reg = getRegister(b2 & 0x07, w);
+	} else {
+		decodeMemoryLoc(ctx, &(locs->dst.mem), w);
+	}
+
+	decodeImmediateLoc(ctx, &(locs->src.imm), s, w);
+}
+
+static void decodeAccImm(DecodeContext* ctx, LocPair* locs) {
+	bool w = (ctx->bytes[0] & 0x01) == 0x01;
+
+	locs->dst.reg.type = LOC_REG;
+	locs->dst.reg.reg = w ? AX : AL;
+
+	decodeImmediateLoc(ctx, &(locs->src.imm), false, w);
+}
+
+static void decodeLocPair(DecodeContext* ctx, LocPairInstruction* instr) {
+#define DECODE(fn)                                                                      \
+	fn(ctx, &instr->locs);                                                                \
+	break;
+
+#define UPDATE_INSTR(i)                                                                 \
+	instr->oc.type = i;                                                                   \
+	break;
+
+	// clang-format off
+	switch (instr->oc.enc) {
+		case ENC_MODRM: DECODE(decodeModRM);
+		case ENC_REG_IMM: DECODE(decodeRegImm);
+		case ENC_MODRM_IMM: DECODE(decodeModRMImm);
+		case ENC_MODRM_IMM_SW: DECODE(decodeModRMImmSW);
+		case ENC_ACC_IMM: DECODE(decodeAccImm);
+		default:
+			fprintf(stderr, "Unhandled encoding: %02x\n", instr->oc.enc);
+			assert(false);
+	}
+	// clang-format on
+
+	// clang-format off
+	if (instr->oc.type == IT_GROUP_1) {
+		u8 b = (ctx->bytes[1] & 0x38) >> 3;
+		switch (b) {
+			case 0x00: UPDATE_INSTR(IT_ADD);
+			case 0x01: UPDATE_INSTR(IT_UNKNOWN); // OR
+			case 0x02: UPDATE_INSTR(IT_UNKNOWN); // ADC
+			case 0x03: UPDATE_INSTR(IT_UNKNOWN); // SBB
+			case 0x04: UPDATE_INSTR(IT_UNKNOWN); // AND
+			case 0x05: UPDATE_INSTR(IT_SUB);
+			case 0x06: UPDATE_INSTR(IT_UNKNOWN); // XOR
+			case 0x07: UPDATE_INSTR(IT_CMP);
+			default:
+				fprintf(stderr, "Unknown bit sequence for group 1: %02x\n", b);
+				assert(false);
+		}
+	}
+	// clang-format on
+
+#undef UPDATE_INSTR
+#undef DECODE
+}
+
+static void decodeSignedDisplacement(DecodeContext* ctx, SignedDisplacementInstruction* instr) {
+	readBytes(ctx, 1);
+	instr->disp = ctx->bytes[1];
+}
+
+DecodeResult InstructionDecodeFromFile(File* f) {
+	DecodeResult result = {0};
+	DecodeContext ctx = {0};
+	ctx.f = f;
+
+	usize nread = fread(ctx.bytes, sizeof(u8), 1, f);
+	if (nread == 0) {
+		result.eof = true;
+		return result;
+	}
+	ctx.len = 1;
+
+	u8 b1 = ctx.bytes[0];
+	result.instr.oc = OpCodeTable[b1];
+
+	switch (result.instr.oc.type) {
+		case IT_ADD:
+		case IT_CMP:
+		case IT_MOV:
+		case IT_SUB:
+		case IT_GROUP_1:
+			decodeLocPair(&ctx, &result.instr.locPair);
+			break;
+		case IT_JA:
+		case IT_JAE:
+		case IT_JB:
+		case IT_JBE:
+		case IT_JCXZ:
+		case IT_JE:
+		case IT_JG:
+		case IT_JGE:
+		case IT_JL:
+		case IT_JLE:
+		case IT_JNE:
+		case IT_JNO:
+		case IT_JNS:
+		case IT_JO:
+		case IT_JP:
+		case IT_JPO:
+		case IT_JS:
+		case IT_LOOP:
+		case IT_LOOPNZ:
+		case IT_LOOPZ:
+			decodeSignedDisplacement(&ctx, &result.instr.signedDisp);
+			break;
+		default:
+			fprintf(stderr, "Unhandled opcode: %02x\n", b1);
+			assert(false);
+	}
+
+	return result;
+}
+
+// ============================================================================
+// Unparsing
+// ============================================================================
 
 void unparseLocPair(LocPair* instr, StringBuilder* sb);
 void unparseSignedDisplacement(SignedDisplacementInstruction* instr, StringBuilder* sb);
