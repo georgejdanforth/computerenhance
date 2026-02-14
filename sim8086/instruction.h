@@ -86,7 +86,6 @@ typedef struct {
 typedef struct {
 	LocType type;
 	bool isSigned;
-	bool isWord;
 	u16 data;
 } ImmediateLoc;
 
@@ -94,7 +93,6 @@ typedef struct {
 	LocType type;
 	EffectiveAddress ea;
 	u16 disp;
-	bool isWord;
 } MemoryLoc;
 
 typedef union {
@@ -107,6 +105,7 @@ typedef union {
 typedef struct {
 	Loc src;
 	Loc dst;
+	bool isWord;
 } LocPair;
 
 typedef struct {

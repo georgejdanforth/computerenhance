@@ -311,14 +311,13 @@ static Register getRegister(u8 b, bool w) {
 	assert(false);
 }
 
-static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc, bool w) {
+static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc) {
 #define SET_EA(e)                                                                       \
 	loc->ea = e;                                                                          \
 	break;
 
 	loc->type = LOC_MEM;
 	loc->disp = 0;
-	loc->isWord = w;
 
 	u8 b2 = ctx->bytes[1];
 
@@ -358,7 +357,6 @@ static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc, bool w) {
 
 static void decodeImmediateLoc(DecodeContext* ctx, ImmediateLoc* loc, bool s, bool w) {
 	loc->type = LOC_IMM;
-	loc->isWord = w;
 
 	if (s && w) {
 		readBytes(ctx, 1);
@@ -382,6 +380,7 @@ static void decodeModRM(DecodeContext* ctx, LocPair* locs) {
 	u8 b2 = ctx->bytes[1];
 	bool d = (b1 & 0x02) == 0x02;
 	bool w = (b1 & 0x01) == 0x01;
+	locs->isWord = w;
 
 	Loc regLoc;
 	regLoc.reg.type = LOC_REG;
@@ -392,7 +391,7 @@ static void decodeModRM(DecodeContext* ctx, LocPair* locs) {
 		rmLoc.reg.type = LOC_REG;
 		rmLoc.reg.reg = getRegister(b2 & 0x07, w);
 	} else {
-		decodeMemoryLoc(ctx, &rmLoc.mem, w);
+		decodeMemoryLoc(ctx, &rmLoc.mem);
 	}
 
 	if (d) {
@@ -407,6 +406,7 @@ static void decodeModRM(DecodeContext* ctx, LocPair* locs) {
 static void decodeRegImm(DecodeContext* ctx, LocPair* locs) {
 	u8 b1 = ctx->bytes[0];
 	bool w = (b1 & 0x08) == 0x08;
+	locs->isWord = w;
 
 	locs->dst.reg.type = LOC_REG;
 	locs->dst.reg.reg = getRegister(b1 & 0x07, w);
@@ -420,12 +420,13 @@ static void decodeModRMImm(DecodeContext* ctx, LocPair* locs) {
 	u8 b1 = ctx->bytes[0];
 	u8 b2 = ctx->bytes[1];
 	bool w = (b1 & 0x01) == 0x01;
+	locs->isWord = w;
 
 	if ((b2 & 0xC0) == 0xC0) {
 		locs->dst.reg.type = LOC_REG;
 		locs->dst.reg.reg = getRegister(b2 & 0x07, w);
 	} else {
-		decodeMemoryLoc(ctx, &(locs->dst.mem), w);
+		decodeMemoryLoc(ctx, &(locs->dst.mem));
 	}
 
 	decodeImmediateLoc(ctx, &(locs->src.imm), false, w);
@@ -438,12 +439,13 @@ static void decodeModRMImmSW(DecodeContext* ctx, LocPair* locs) {
 	u8 b2 = ctx->bytes[1];
 	bool s = (b1 & 0x02) == 0x02;
 	bool w = (b1 & 0x01) == 0x01;
+	locs->isWord = w;
 
 	if ((b2 & 0xC0) == 0xC0) {
 		locs->dst.reg.type = LOC_REG;
 		locs->dst.reg.reg = getRegister(b2 & 0x07, w);
 	} else {
-		decodeMemoryLoc(ctx, &(locs->dst.mem), w);
+		decodeMemoryLoc(ctx, &(locs->dst.mem));
 	}
 
 	decodeImmediateLoc(ctx, &(locs->src.imm), s, w);
@@ -451,6 +453,7 @@ static void decodeModRMImmSW(DecodeContext* ctx, LocPair* locs) {
 
 static void decodeAccImm(DecodeContext* ctx, LocPair* locs) {
 	bool w = (ctx->bytes[0] & 0x01) == 0x01;
+	locs->isWord = w;
 
 	locs->dst.reg.type = LOC_REG;
 	locs->dst.reg.reg = w ? AX : AL;
@@ -565,12 +568,12 @@ DecodeResult InstructionDecodeFromFile(File* f) {
 // Unparsing
 // ============================================================================
 
-void unparseLocPair(LocPair* instr, StringBuilder* sb);
+void unparseLocPair(LocPair* locs, StringBuilder* sb);
 void unparseSignedDisplacement(SignedDisplacementInstruction* instr, StringBuilder* sb);
-void unparseLoc(Loc* loc, StringBuilder* sb);
+void unparseLoc(Loc* loc, bool isWord, StringBuilder* sb);
 void unparseRegisterLoc(RegisterLoc* loc, StringBuilder* sb);
 void unparseMemoryLoc(MemoryLoc* loc, StringBuilder* sb);
-void unparseImmediateLoc(ImmediateLoc* loc, StringBuilder* sb);
+void unparseImmediateLoc(ImmediateLoc* loc, bool isWord, StringBuilder* sb);
 
 void InstructionUnparse(Instruction* instr, StringBuilder* sb) {
 #define APPEND_INSTR(i)                                                                 \
@@ -652,11 +655,11 @@ void InstructionUnparse(Instruction* instr, StringBuilder* sb) {
 void unparseLocPair(LocPair* locs, StringBuilder* sb) {
 	// Output "byte" or "word" when dst is memory and src is immediate
 	if (locs->dst.type == LOC_MEM && locs->src.type == LOC_IMM) {
-		StringBuilderAppend(sb, locs->dst.mem.isWord ? "word " : "byte ");
+		StringBuilderAppend(sb, locs->isWord ? "word " : "byte ");
 	}
-	unparseLoc(&locs->dst, sb);
+	unparseLoc(&locs->dst, locs->isWord, sb);
 	StringBuilderAppend(sb, ", ");
-	unparseLoc(&locs->src, sb);
+	unparseLoc(&locs->src, locs->isWord, sb);
 }
 
 void unparseSignedDisplacement(SignedDisplacementInstruction* instr, StringBuilder* sb) {
@@ -665,7 +668,7 @@ void unparseSignedDisplacement(SignedDisplacementInstruction* instr, StringBuild
 	StringBuilderAppend(sb, buf);
 }
 
-void unparseLoc(Loc* loc, StringBuilder* sb) {
+void unparseLoc(Loc* loc, bool isWord, StringBuilder* sb) {
 	switch (loc->type) {
 		case LOC_REG:
 			unparseRegisterLoc(&loc->reg, sb);
@@ -674,7 +677,7 @@ void unparseLoc(Loc* loc, StringBuilder* sb) {
 			unparseMemoryLoc(&loc->mem, sb);
 			return;
 		case LOC_IMM:
-			unparseImmediateLoc(&loc->imm, sb);
+			unparseImmediateLoc(&loc->imm, isWord, sb);
 			return;
 		default:
 			fprintf(stderr, "Unparse not defined for mov loc: %d", loc->type);
@@ -752,12 +755,12 @@ void unparseMemoryLoc(MemoryLoc* loc, StringBuilder* sb) {
 #undef APPEND_EA
 }
 
-void unparseImmediateLoc(ImmediateLoc* loc, StringBuilder* sb) {
+void unparseImmediateLoc(ImmediateLoc* loc, bool isWord, StringBuilder* sb) {
 	char buf[8];
 	if (loc->isSigned) {
 		// Sign-extended immediate (s=1, w=1 case)
 		sprintf(buf, "%d", (i16)loc->data);
-	} else if (!loc->isWord && (loc->data & 0x80)) {
+	} else if (!isWord && (loc->data & 0x80)) {
 		// 8-bit immediate with high bit set - display as signed
 		sprintf(buf, "%d", (i8)loc->data);
 	} else {
