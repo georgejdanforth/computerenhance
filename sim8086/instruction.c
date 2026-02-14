@@ -568,6 +568,64 @@ DecodeResult InstructionDecodeFromFile(File* f) {
 // Unparsing
 // ============================================================================
 
+static const char* InstructionTypeNames[] = {
+	[IT_ADD] = "add",
+	[IT_CMP] = "cmp",
+	[IT_JA] = "ja",
+	[IT_JAE] = "jae",
+	[IT_JB] = "jb",
+	[IT_JBE] = "jbe",
+	[IT_JCXZ] = "jcxz",
+	[IT_JE] = "je",
+	[IT_JG] = "jg",
+	[IT_JGE] = "jge",
+	[IT_JL] = "jl",
+	[IT_JLE] = "jle",
+	[IT_JNE] = "jne",
+	[IT_JNO] = "jno",
+	[IT_JNS] = "jns",
+	[IT_JO] = "jo",
+	[IT_JP] = "jp",
+	[IT_JPO] = "jpo",
+	[IT_JS] = "js",
+	[IT_LOOP] = "loop",
+	[IT_LOOPNZ] = "loopnz",
+	[IT_LOOPZ] = "loopz",
+	[IT_MOV] = "mov",
+	[IT_SUB] = "sub",
+};
+
+const char* InstructionTypeName(InstructionType type) {
+	const char* name = InstructionTypeNames[type];
+	assert(name != NULL);
+	return name;
+}
+
+static const char* RegisterNames[] = {
+	[AX] = "ax",
+	[BX] = "bx",
+	[CX] = "cx",
+	[DX] = "dx",
+	[SP] = "sp",
+	[BP] = "bp",
+	[SI] = "si",
+	[DI] = "di",
+	[AL] = "al",
+	[AH] = "ah",
+	[BL] = "bl",
+	[BH] = "bh",
+	[CL] = "cl",
+	[CH] = "ch",
+	[DL] = "dl",
+	[DH] = "dh",
+};
+
+const char* RegisterName(Register reg) {
+	const char* name = RegisterNames[reg];
+	assert(name != NULL);
+	return name;
+}
+
 void unparseLocPair(LocPair* locs, StringBuilder* sb);
 void unparseSignedDisplacement(SignedDisplacementInstruction* instr, StringBuilder* sb);
 void unparseLoc(Loc* loc, bool isWord, StringBuilder* sb);
@@ -576,42 +634,8 @@ void unparseMemoryLoc(MemoryLoc* loc, StringBuilder* sb);
 void unparseImmediateLoc(ImmediateLoc* loc, bool isWord, StringBuilder* sb);
 
 void InstructionUnparse(Instruction* instr, StringBuilder* sb) {
-#define APPEND_INSTR(i)                                                                 \
-	StringBuilderAppend(sb, i " ");                                                       \
-	break;
-
-	// clang-format off
-	switch (instr->oc.type) {
-		case IT_ADD: APPEND_INSTR("add");
-		case IT_CMP: APPEND_INSTR("cmp");
-		case IT_MOV: APPEND_INSTR("mov");
-		case IT_SUB: APPEND_INSTR("sub");
-		case IT_JA: APPEND_INSTR("ja");
-		case IT_JAE: APPEND_INSTR("jae");
-		case IT_JB: APPEND_INSTR("jb");
-		case IT_JBE: APPEND_INSTR("jbe");
-		case IT_JCXZ: APPEND_INSTR("jcxz");
-		case IT_JE: APPEND_INSTR("je");
-		case IT_JG: APPEND_INSTR("jg");
-		case IT_JGE: APPEND_INSTR("jge");
-		case IT_JL: APPEND_INSTR("jl");
-		case IT_JLE: APPEND_INSTR("jle");
-		case IT_JNE: APPEND_INSTR("jne");
-		case IT_JNO: APPEND_INSTR("jno");
-		case IT_JNS: APPEND_INSTR("jns");
-		case IT_JO: APPEND_INSTR("jo");
-		case IT_JP: APPEND_INSTR("jp");
-		case IT_JPO: APPEND_INSTR("jpo");
-		case IT_JS: APPEND_INSTR("js");
-		case IT_LOOP: APPEND_INSTR("loop");
-		case IT_LOOPNZ: APPEND_INSTR("loopnz");
-		case IT_LOOPZ: APPEND_INSTR("loopz");
-		default:
-			// panic
-			fprintf(stderr, "Unhandled instruction type: %02x\n", instr->oc.type);
-			assert(false);
-	}
-	// clang-format on
+	StringBuilderAppend(sb, InstructionTypeName(instr->oc.type));
+	StringBuilderAppend(sb, " ");
 
 	switch (instr->oc.type) {
 		case IT_ADD:
@@ -686,34 +710,7 @@ void unparseLoc(Loc* loc, bool isWord, StringBuilder* sb) {
 }
 
 void unparseRegisterLoc(RegisterLoc* loc, StringBuilder* sb) {
-#define APPEND_REGISTER(r)                                                              \
-	StringBuilderAppend(sb, r);                                                           \
-	return;
-
-	// clang-format off
-	switch (loc->reg) {
-		case AX: APPEND_REGISTER("ax");
-		case BX: APPEND_REGISTER("bx");
-		case CX: APPEND_REGISTER("cx");
-		case DX: APPEND_REGISTER("dx");
-		case SP: APPEND_REGISTER("sp");
-		case BP: APPEND_REGISTER("bp");
-		case SI: APPEND_REGISTER("si");
-		case DI: APPEND_REGISTER("di");
-		case AL: APPEND_REGISTER("al");
-		case BL: APPEND_REGISTER("bl");
-		case CL: APPEND_REGISTER("cl");
-		case DL: APPEND_REGISTER("dl");
-		case AH: APPEND_REGISTER("ah");
-		case BH: APPEND_REGISTER("bh");
-		case CH: APPEND_REGISTER("ch");
-		case DH: APPEND_REGISTER("dh");
-	}
-	// clang-format on
-	// panic
-	fprintf(stderr, "Unhandled register in unparse: %d", loc->reg);
-	assert(false);
-#undef APPEND_REGISTER
+	StringBuilderAppend(sb, RegisterName(loc->reg));
 }
 
 void unparseMemoryLoc(MemoryLoc* loc, StringBuilder* sb) {

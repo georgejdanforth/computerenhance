@@ -49,7 +49,24 @@ typedef enum {
 	ENC_IP_INC8,      // Signed 8-bit displacement following opcode
 } OpEncoding;
 
-typedef enum { AX, BX, CX, DX, SP, BP, SI, DI, AL, AH, BL, BH, CL, CH, DL, DH } Register;
+typedef enum {
+	AX = 0,
+	BX,
+	CX,
+	DX,
+	SP,
+	BP,
+	SI,
+	DI,
+	AL,
+	AH,
+	BL,
+	BH,
+	CL,
+	CH,
+	DL,
+	DH
+} Register;
 
 typedef enum {
 	EA_BX_SI,
@@ -136,5 +153,7 @@ typedef struct {
 
 DecodeResult InstructionDecodeFromFile(File* f);
 void InstructionUnparse(Instruction* instr, StringBuilder* sb);
+const char* InstructionTypeName(InstructionType type);
+const char* RegisterName(Register reg);
 
 #endif // __INSTRUCTION_H__
