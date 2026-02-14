@@ -8,6 +8,7 @@
 #include "common/strings.h"
 #include "common/types.h"
 
+#include "debug.h"
 #include "instruction.h"
 #include "sim.h"
 #include "sim8086.h"

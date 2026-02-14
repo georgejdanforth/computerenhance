@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "debug.h"
 #include "sim.h"
 
 static void execMov(CPU* cpu, MovInstruction* instr, StringBuilder* sb);

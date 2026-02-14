@@ -3,7 +3,6 @@
 
 #include <stdbool.h>
 
-#include "common/strings.h"
 #include "common/types.h"
 
 typedef enum {
@@ -132,6 +131,8 @@ typedef struct {
 
 typedef LocPairInstruction MovInstruction;
 typedef LocPairInstruction AddInstruction;
+typedef LocPairInstruction SubInstruction;
+typedef LocPairInstruction CmpInstruction;
 
 typedef struct {
 	OpCode oc;
@@ -152,8 +153,5 @@ typedef struct {
 } DecodeResult;
 
 DecodeResult InstructionDecodeFromFile(File* f);
-void InstructionUnparse(Instruction* instr, StringBuilder* sb);
-const char* InstructionTypeName(InstructionType type);
-const char* RegisterName(Register reg);
 
 #endif // __INSTRUCTION_H__
