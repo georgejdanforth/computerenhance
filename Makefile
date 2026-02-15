@@ -23,4 +23,9 @@ clean:
 	rm -rf $(BUILD) $(TARGET)
 
 test-regress-sim8086-decode: $(TARGET)
-	./scripts/test-regress-sim8086-decode.sh
+	./scripts/test-regress-sim8086.sh decode
+
+test-regress-sim8086-exec: $(TARGET)
+	./scripts/test-regress-sim8086.sh exec
+
+test-regress-sim8086: test-regress-sim8086-decode test-regress-sim8086-exec
