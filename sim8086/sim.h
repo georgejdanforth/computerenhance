@@ -11,7 +11,9 @@ typedef struct {
 } CPU;
 
 void CPUInit(CPU* cpu);
-void CPUDumpRegisters(CPU* cpu);
-void CPUExec(CPU* cpu, Instruction* instr, StringBuilder* sb);
+void* CPUGetRegisterPtr(CPU* cpu, Register reg);
+void CPUExec(CPU* cpu, Instruction* instr);
+
+void* GetLocPtr(CPU* cpu, Loc* loc);
 
 #endif // __SIM_H__

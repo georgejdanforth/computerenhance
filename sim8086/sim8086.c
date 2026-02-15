@@ -14,13 +14,16 @@
 #include "sim8086.h"
 
 typedef struct {
+	bool decodeOnly;
 	char* filePath;
 } Opts;
 
 static void printUsage(void) {
-	fprintf(stderr, "Usage: computerenhance sim8086 [options]\n\n"
-	                "Execute and/or disassemble the given file.\n\n"
-	                "\t-f\tBinary file path\n");
+	fprintf(stderr,
+	        "Usage: computerenhance sim8086 [options]\n\n"
+	        "Execute and/or disassemble the given file.\n\n"
+	        "  -f FILE             Binary file path\n"
+	        "  -d, --decode-only   Only decode without executing the binary file\n");
 }
 
 int RunSim8086(int argc, char** argv) {
@@ -30,11 +33,13 @@ int RunSim8086(int argc, char** argv) {
 	}
 
 	Opts opts;
+	opts.decodeOnly = false;
 	opts.filePath = null;
 
 	int i = 0;
 	while (i < argc) {
 		OPT_SHORT(i, opts, filePath, "-f");
+		FLAG_LONG(i, opts, decodeOnly, "-d", "--decode-only");
 		i++;
 	}
 
@@ -54,13 +59,21 @@ int RunSim8086(int argc, char** argv) {
 		if (result.eof) {
 			break;
 		}
-		InstructionUnparse(&result.instr, &sb);
-		CPUExec(&cpu, &result.instr, &sb);
+		if (opts.decodeOnly) {
+			UnparseInstruction(&result.instr, null, &sb);
+		} else {
+			UnparseInstruction(&result.instr, &cpu, &sb);
+			CPUExec(&cpu, &result.instr);
+		}
 		char* str = StringBuilderString(&sb);
 		printf("%s\n", str);
 		StringBuilderRewind(&sb);
 	}
-	CPUDumpRegisters(&cpu);
+
+	if (!opts.decodeOnly) {
+		printf("\n");
+		DumpCPURegisters(&cpu);
+	}
 
 	fclose(in);
 	return EXIT_SUCCESS;

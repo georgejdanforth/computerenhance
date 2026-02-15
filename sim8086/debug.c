@@ -2,32 +2,15 @@
 #include <stdio.h>
 
 #include "debug.h"
+#include "sim.h"
 
 static const char* InstructionTypeNames[] = {
-	[IT_ADD] = "add",
-	[IT_CMP] = "cmp",
-	[IT_JA] = "ja",
-	[IT_JAE] = "jae",
-	[IT_JB] = "jb",
-	[IT_JBE] = "jbe",
-	[IT_JCXZ] = "jcxz",
-	[IT_JE] = "je",
-	[IT_JG] = "jg",
-	[IT_JGE] = "jge",
-	[IT_JL] = "jl",
-	[IT_JLE] = "jle",
-	[IT_JNE] = "jne",
-	[IT_JNO] = "jno",
-	[IT_JNS] = "jns",
-	[IT_JO] = "jo",
-	[IT_JP] = "jp",
-	[IT_JPO] = "jpo",
-	[IT_JS] = "js",
-	[IT_LOOP] = "loop",
-	[IT_LOOPNZ] = "loopnz",
-	[IT_LOOPZ] = "loopz",
-	[IT_MOV] = "mov",
-	[IT_SUB] = "sub",
+		[IT_ADD] = "add",       [IT_CMP] = "cmp",     [IT_JA] = "ja",     [IT_JAE] = "jae",
+		[IT_JB] = "jb",         [IT_JBE] = "jbe",     [IT_JCXZ] = "jcxz", [IT_JE] = "je",
+		[IT_JG] = "jg",         [IT_JGE] = "jge",     [IT_JL] = "jl",     [IT_JLE] = "jle",
+		[IT_JNE] = "jne",       [IT_JNO] = "jno",     [IT_JNS] = "jns",   [IT_JO] = "jo",
+		[IT_JP] = "jp",         [IT_JPO] = "jpo",     [IT_JS] = "js",     [IT_LOOP] = "loop",
+		[IT_LOOPNZ] = "loopnz", [IT_LOOPZ] = "loopz", [IT_MOV] = "mov",   [IT_SUB] = "sub",
 };
 
 const char* InstructionTypeName(InstructionType type) {
@@ -37,22 +20,9 @@ const char* InstructionTypeName(InstructionType type) {
 }
 
 static const char* RegisterNames[] = {
-	[AX] = "ax",
-	[BX] = "bx",
-	[CX] = "cx",
-	[DX] = "dx",
-	[SP] = "sp",
-	[BP] = "bp",
-	[SI] = "si",
-	[DI] = "di",
-	[AL] = "al",
-	[AH] = "ah",
-	[BL] = "bl",
-	[BH] = "bh",
-	[CL] = "cl",
-	[CH] = "ch",
-	[DL] = "dl",
-	[DH] = "dh",
+		[AX] = "ax", [BX] = "bx", [CX] = "cx", [DX] = "dx", [SP] = "sp", [BP] = "bp",
+		[SI] = "si", [DI] = "di", [AL] = "al", [AH] = "ah", [BL] = "bl", [BH] = "bh",
+		[CL] = "cl", [CH] = "ch", [DL] = "dl", [DH] = "dh",
 };
 
 const char* RegisterName(Register reg) {
@@ -61,14 +31,15 @@ const char* RegisterName(Register reg) {
 	return name;
 }
 
-static void unparseLocPair(LocPair* locs, StringBuilder* sb);
-static void unparseSignedDisplacement(SignedDisplacementInstruction* instr, StringBuilder* sb);
+static void unparseLocPair(LocPair* locs, CPU* cpu, StringBuilder* sb);
+static void unparseSignedDisplacement(SignedDisplacementInstruction* instr, CPU* cpu,
+                                      StringBuilder* sb);
 static void unparseLoc(Loc* loc, bool isWord, StringBuilder* sb);
 static void unparseRegisterLoc(RegisterLoc* loc, StringBuilder* sb);
 static void unparseMemoryLoc(MemoryLoc* loc, StringBuilder* sb);
 static void unparseImmediateLoc(ImmediateLoc* loc, bool isWord, StringBuilder* sb);
 
-void InstructionUnparse(Instruction* instr, StringBuilder* sb) {
+void UnparseInstruction(Instruction* instr, CPU* cpu, StringBuilder* sb) {
 	StringBuilderAppend(sb, InstructionTypeName(instr->oc.type));
 	StringBuilderAppend(sb, " ");
 
@@ -77,7 +48,7 @@ void InstructionUnparse(Instruction* instr, StringBuilder* sb) {
 		case IT_CMP:
 		case IT_MOV:
 		case IT_SUB:
-			return unparseLocPair(&(instr->locPair.locs), sb);
+			return unparseLocPair(&(instr->locPair.locs), cpu, sb);
 		case IT_JA:
 		case IT_JAE:
 		case IT_JB:
@@ -98,23 +69,40 @@ void InstructionUnparse(Instruction* instr, StringBuilder* sb) {
 		case IT_LOOP:
 		case IT_LOOPNZ:
 		case IT_LOOPZ:
-			return unparseSignedDisplacement(&instr->signedDisp, sb);
+			return unparseSignedDisplacement(&instr->signedDisp, cpu, sb);
 		default:
 			fprintf(stderr, "Unhandled instruction type: %02x\n", instr->oc.type);
 			assert(false);
 	}
 }
 
-static void unparseLocPair(LocPair* locs, StringBuilder* sb) {
+static void unparseLocPair(LocPair* locs, CPU* cpu, StringBuilder* sb) {
 	if (locs->dst.type == LOC_MEM && locs->src.type == LOC_IMM) {
 		StringBuilderAppend(sb, locs->isWord ? "word " : "byte ");
 	}
 	unparseLoc(&locs->dst, locs->isWord, sb);
 	StringBuilderAppend(sb, ", ");
 	unparseLoc(&locs->src, locs->isWord, sb);
+
+	if (cpu != null) {
+		char buf[18];
+		StringBuilderAppend(sb, " ; ");
+		void* dst = GetLocPtr(cpu, &locs->dst);
+		void* src = GetLocPtr(cpu, &locs->src);
+
+		if (locs->isWord) {
+			sprintf(buf, "0x%04x -> 0x%04x", *(u16*)dst, *(u16*)src);
+		} else {
+			sprintf(buf, "0x%02x -> 0x%02x", *(u8*)dst, *(u8*)src);
+		}
+
+		StringBuilderAppend(sb, buf);
+	}
 }
 
-static void unparseSignedDisplacement(SignedDisplacementInstruction* instr, StringBuilder* sb) {
+static void unparseSignedDisplacement(SignedDisplacementInstruction* instr, CPU* cpu,
+                                      StringBuilder* sb) {
+	(void)cpu;
 	char buf[4];
 	sprintf(buf, "%d", instr->disp);
 	StringBuilderAppend(sb, buf);
@@ -190,4 +178,32 @@ static void unparseImmediateLoc(ImmediateLoc* loc, bool isWord, StringBuilder* s
 		sprintf(buf, "%d", loc->data);
 	}
 	StringBuilderAppend(sb, buf);
+}
+
+void printRegister(CPU* cpu, Register reg) {
+	void* regPtr = CPUGetRegisterPtr(cpu, reg);
+	switch (reg) {
+		case AH:
+		case AL:
+		case BH:
+		case BL:
+		case CH:
+		case CL:
+		case DH:
+		case DL: {
+			u8 val = *(u8*)regPtr;
+			printf("%s: 0x%02x (%d)\n", RegisterName(reg), val, val);
+			break;
+		}
+		default: {
+			u16 val = *(u16*)regPtr;
+			printf("%s: 0x%04x (%d)\n", RegisterName(reg), val, val);
+		}
+	}
+}
+
+void DumpCPURegisters(CPU* cpu) {
+	for (int i = 0; i < 16; i++) {
+		printRegister(cpu, (Register)i);
+	}
 }
