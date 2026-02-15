@@ -21,3 +21,6 @@ debug: $(TARGET)
 
 clean:
 	rm -rf $(BUILD) $(TARGET)
+
+test-regress-sim8086-decode: $(TARGET)
+	./scripts/test-regress-sim8086-decode.sh
