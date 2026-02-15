@@ -31,15 +31,17 @@ const char* RegisterName(Register reg) {
 	return name;
 }
 
-static void unparseLocPair(LocPair* locs, CPU* cpu, StringBuilder* sb);
-static void unparseSignedDisplacement(SignedDisplacementInstruction* instr, CPU* cpu,
+static void unparseLocPair(LocPair* locs, StringBuilder* sb);
+static void unparseSignedDisplacement(SignedDisplacementInstruction* instr,
                                       StringBuilder* sb);
 static void unparseLoc(Loc* loc, bool isWord, StringBuilder* sb);
 static void unparseRegisterLoc(RegisterLoc* loc, StringBuilder* sb);
 static void unparseMemoryLoc(MemoryLoc* loc, StringBuilder* sb);
 static void unparseImmediateLoc(ImmediateLoc* loc, bool isWord, StringBuilder* sb);
 
-void UnparseInstruction(Instruction* instr, CPU* cpu, StringBuilder* sb) {
+static void cpuDiff(CPUPair* cpus, StringBuilder* sb);
+
+void UnparseInstruction(Instruction* instr, CPUPair* cpus, StringBuilder* sb) {
 	StringBuilderAppend(sb, InstructionTypeName(instr->oc.type));
 	StringBuilderAppend(sb, " ");
 
@@ -48,7 +50,8 @@ void UnparseInstruction(Instruction* instr, CPU* cpu, StringBuilder* sb) {
 		case IT_CMP:
 		case IT_MOV:
 		case IT_SUB:
-			return unparseLocPair(&(instr->locPair.locs), cpu, sb);
+			unparseLocPair(&(instr->locPair.locs), sb);
+			break;
 		case IT_JA:
 		case IT_JAE:
 		case IT_JB:
@@ -69,14 +72,19 @@ void UnparseInstruction(Instruction* instr, CPU* cpu, StringBuilder* sb) {
 		case IT_LOOP:
 		case IT_LOOPNZ:
 		case IT_LOOPZ:
-			return unparseSignedDisplacement(&instr->signedDisp, cpu, sb);
+			unparseSignedDisplacement(&instr->signedDisp, sb);
+			break;
 		default:
 			fprintf(stderr, "Unhandled instruction type: %02x\n", instr->oc.type);
 			assert(false);
 	}
+
+	if (cpus != null) {
+		cpuDiff(cpus, sb);
+	}
 }
 
-static void unparseLocPair(LocPair* locs, CPU* cpu, StringBuilder* sb) {
+static void unparseLocPair(LocPair* locs, StringBuilder* sb) {
 	if (locs->dst.type == LOC_MEM && locs->src.type == LOC_IMM) {
 		StringBuilderAppend(sb, locs->isWord ? "word " : "byte ");
 	}
@@ -84,25 +92,26 @@ static void unparseLocPair(LocPair* locs, CPU* cpu, StringBuilder* sb) {
 	StringBuilderAppend(sb, ", ");
 	unparseLoc(&locs->src, locs->isWord, sb);
 
+	/*
 	if (cpu != null) {
-		char buf[18];
-		StringBuilderAppend(sb, " ; ");
-		void* dst = GetLocPtr(cpu, &locs->dst);
-		void* src = GetLocPtr(cpu, &locs->src);
+	  char buf[18];
+	  StringBuilderAppend(sb, " ; ");
+	  void* dst = GetLocPtr(cpu, &locs->dst);
+	  void* src = GetLocPtr(cpu, &locs->src);
 
-		if (locs->isWord) {
-			sprintf(buf, "0x%04x -> 0x%04x", *(u16*)dst, *(u16*)src);
-		} else {
-			sprintf(buf, "0x%02x -> 0x%02x", *(u8*)dst, *(u8*)src);
-		}
+	  if (locs->isWord) {
+	    sprintf(buf, "0x%04x -> 0x%04x", *(u16*)dst, *(u16*)src);
+	  } else {
+	    sprintf(buf, "0x%02x -> 0x%02x", *(u8*)dst, *(u8*)src);
+	  }
 
-		StringBuilderAppend(sb, buf);
+	  StringBuilderAppend(sb, buf);
 	}
+	*/
 }
 
-static void unparseSignedDisplacement(SignedDisplacementInstruction* instr, CPU* cpu,
+static void unparseSignedDisplacement(SignedDisplacementInstruction* instr,
                                       StringBuilder* sb) {
-	(void)cpu;
 	char buf[4];
 	sprintf(buf, "%d", instr->disp);
 	StringBuilderAppend(sb, buf);
@@ -180,6 +189,65 @@ static void unparseImmediateLoc(ImmediateLoc* loc, bool isWord, StringBuilder* s
 	StringBuilderAppend(sb, buf);
 }
 
+static void printFlags(char* buf, u16 flags) {
+#define IS_SET(f) (flags & f) == f
+	int i = 0;
+	// clang-format off
+	if (IS_SET(CF)) buf[i++] = 'C';
+	if (IS_SET(PF)) buf[i++] = 'P';
+	if (IS_SET(AF)) buf[i++] = 'A';
+	if (IS_SET(ZF)) buf[i++] = 'Z';
+	if (IS_SET(SF)) buf[i++] = 'S';
+	if (IS_SET(TF)) buf[i++] = 'T';
+	// clang-format on
+	buf[i] = '\0';
+#undef IS_SET
+}
+
+static void cpuDiff(CPUPair* cpus, StringBuilder* sb) {
+	char buf[32];
+	bool hasDiff;
+	StringBuilderAppend(sb, " ;");
+	for (int i = 0; i < 16; i++) {
+		Register reg = (Register)i;
+		const char* regName = RegisterName(reg);
+		void* prev = CPUGetRegisterPtr(&cpus->prev, reg);
+		void* curr = CPUGetRegisterPtr(&cpus->curr, reg);
+		switch (reg) {
+			case AH:
+			case AL:
+			case BH:
+			case BL:
+			case CH:
+			case CL:
+			case DH:
+			case DL:
+				continue;
+			default: {
+				if (*(u16*)prev != *(u16*)curr) {
+					sprintf(buf, " %s:0x%04x->0x%04x", regName, *(u16*)prev, *(u16*)curr);
+					StringBuilderAppend(sb, buf);
+					hasDiff = true;
+				}
+			}
+		}
+	}
+
+	if (cpus->prev.flags != cpus->curr.flags) {
+		printFlags(buf, cpus->prev.flags);
+		StringBuilderAppend(sb, " flags:");
+		StringBuilderAppend(sb, buf);
+		StringBuilderAppend(sb, "->");
+		printFlags(buf, cpus->curr.flags);
+		StringBuilderAppend(sb, buf);
+		hasDiff = true;
+	}
+
+	if (!hasDiff) {
+		StringBuilderAppend(sb, " no diff");
+	}
+}
+
 void printRegister(CPU* cpu, Register reg) {
 	void* regPtr = CPUGetRegisterPtr(cpu, reg);
 	switch (reg) {
@@ -190,11 +258,8 @@ void printRegister(CPU* cpu, Register reg) {
 		case CH:
 		case CL:
 		case DH:
-		case DL: {
-			u8 val = *(u8*)regPtr;
-			printf("%s: 0x%02x (%d)\n", RegisterName(reg), val, val);
+		case DL:
 			break;
-		}
 		default: {
 			u16 val = *(u16*)regPtr;
 			printf("%s: 0x%04x (%d)\n", RegisterName(reg), val, val);
@@ -203,7 +268,11 @@ void printRegister(CPU* cpu, Register reg) {
 }
 
 void DumpCPURegisters(CPU* cpu) {
+	char buf[16];
+	printf("Final registers:\n");
 	for (int i = 0; i < 16; i++) {
 		printRegister(cpu, (Register)i);
 	}
+	printFlags(buf, cpu->flags);
+	printf("\nFlags: %s\n", buf);
 }

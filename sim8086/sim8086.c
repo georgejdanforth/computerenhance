@@ -50,11 +50,12 @@ int RunSim8086(int argc, char** argv) {
 		return EXIT_FAILURE;
 	}
 
-	CPU cpu;
-	CPUInit(&cpu);
+	CPUPair cpus;
+	CPUInit(&cpus.curr);
 
 	StringBuilder sb = StringBuilderCreate();
 	while (true) {
+		cpus.prev = cpus.curr;
 		DecodeResult result = InstructionDecodeFromFile(in);
 		if (result.eof) {
 			break;
@@ -62,8 +63,8 @@ int RunSim8086(int argc, char** argv) {
 		if (opts.decodeOnly) {
 			UnparseInstruction(&result.instr, null, &sb);
 		} else {
-			UnparseInstruction(&result.instr, &cpu, &sb);
-			CPUExec(&cpu, &result.instr);
+			CPUExec(&cpus.curr, &result.instr);
+			UnparseInstruction(&result.instr, &cpus, &sb);
 		}
 		char* str = StringBuilderString(&sb);
 		printf("%s\n", str);
@@ -72,7 +73,7 @@ int RunSim8086(int argc, char** argv) {
 
 	if (!opts.decodeOnly) {
 		printf("\n");
-		DumpCPURegisters(&cpu);
+		DumpCPURegisters(&cpus.curr);
 	}
 
 	fclose(in);

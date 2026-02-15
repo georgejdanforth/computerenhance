@@ -1,15 +1,16 @@
-mov cx, bx ; 0x0000 -> 0x0000
-mov ch, ah ; 0x00 -> 0x00
-mov dx, bx ; 0x0000 -> 0x0000
-mov si, bx ; 0x0000 -> 0x0000
-mov bx, di ; 0x0000 -> 0x0000
-mov al, cl ; 0x00 -> 0x00
-mov ch, ch ; 0x00 -> 0x00
-mov bx, ax ; 0x0000 -> 0x0000
-mov bx, si ; 0x0000 -> 0x0000
-mov sp, di ; 0x0000 -> 0x0000
-mov bp, ax ; 0x0000 -> 0x0000
+mov cx, bx ; no diff
+mov ch, ah ; no diff
+mov dx, bx ; no diff
+mov si, bx ; no diff
+mov bx, di ; no diff
+mov al, cl ; no diff
+mov ch, ch ; no diff
+mov bx, ax ; no diff
+mov bx, si ; no diff
+mov sp, di ; no diff
+mov bp, ax ; no diff
 
+Final registers:
 ax: 0x0000 (0)
 bx: 0x0000 (0)
 cx: 0x0000 (0)
@@ -18,11 +19,5 @@ sp: 0x0000 (0)
 bp: 0x0000 (0)
 si: 0x0000 (0)
 di: 0x0000 (0)
-al: 0x00 (0)
-ah: 0x00 (0)
-bl: 0x00 (0)
-bh: 0x00 (0)
-cl: 0x00 (0)
-ch: 0x00 (0)
-dl: 0x00 (0)
-dh: 0x00 (0)
+
+Flags: 

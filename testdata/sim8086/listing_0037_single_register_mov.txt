@@ -1,5 +1,6 @@
-mov cx, bx ; 0x0000 -> 0x0000
+mov cx, bx ; no diff
 
+Final registers:
 ax: 0x0000 (0)
 bx: 0x0000 (0)
 cx: 0x0000 (0)
@@ -8,11 +9,5 @@ sp: 0x0000 (0)
 bp: 0x0000 (0)
 si: 0x0000 (0)
 di: 0x0000 (0)
-al: 0x00 (0)
-ah: 0x00 (0)
-bl: 0x00 (0)
-bh: 0x00 (0)
-cl: 0x00 (0)
-ch: 0x00 (0)
-dl: 0x00 (0)
-dh: 0x00 (0)
+
+Flags: 

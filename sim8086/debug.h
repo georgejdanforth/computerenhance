@@ -5,10 +5,15 @@
 #include "instruction.h"
 #include "sim.h"
 
+typedef struct {
+	CPU prev;
+	CPU curr;
+} CPUPair;
+
 const char* InstructionTypeName(InstructionType type);
 const char* RegisterName(Register reg);
 
-void UnparseInstruction(Instruction* instr, CPU* cpu, StringBuilder* sb);
+void UnparseInstruction(Instruction* instr, CPUPair* cpuPair, StringBuilder* sb);
 void DumpCPURegisters(CPU* cpu);
 
 #endif // __DEBUG_H__
