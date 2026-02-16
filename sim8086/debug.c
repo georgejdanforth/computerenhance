@@ -42,10 +42,10 @@ static void unparseImmediateLoc(ImmediateLoc* loc, bool isWord, StringBuilder* s
 static void cpuDiff(CPUPair* cpus, StringBuilder* sb);
 
 void UnparseInstruction(Instruction* instr, CPUPair* cpus, StringBuilder* sb) {
-	StringBuilderAppend(sb, InstructionTypeName(instr->oc.type));
+	StringBuilderAppend(sb, InstructionTypeName(instr->base.oc.type));
 	StringBuilderAppend(sb, " ");
 
-	switch (instr->oc.type) {
+	switch (instr->base.oc.type) {
 		case IT_ADD:
 		case IT_CMP:
 		case IT_MOV:
@@ -75,7 +75,7 @@ void UnparseInstruction(Instruction* instr, CPUPair* cpus, StringBuilder* sb) {
 			unparseSignedDisplacement(&instr->signedDisp, sb);
 			break;
 		default:
-			fprintf(stderr, "Unhandled instruction type: %02x\n", instr->oc.type);
+			fprintf(stderr, "Unhandled instruction type: %02x\n", instr->base.oc.type);
 			assert(false);
 	}
 

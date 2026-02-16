@@ -55,18 +55,22 @@ int RunSim8086(int argc, char** argv) {
 	CPUInit(&cpus.curr);
 
 	StringBuilder sb = StringBuilderCreate();
-	usize offset = 0;
-	while (offset < instrBuf.size) {
+	while (cpus.curr.ip < instrBuf.size) {
 		cpus.prev = cpus.curr;
-		Buffer buf = BufferSlice(instrBuf, offset, instrBuf.size);
-		DecodeResult result = InstructionDecode(buf);
-		offset += result.sizeBytes;
+
+		Buffer buf = BufferSlice(instrBuf, cpus.curr.ip, instrBuf.size);
+		Instruction instr = InstructionDecode(buf);
+
 		if (opts.decodeOnly) {
-			UnparseInstruction(&result.instr, null, &sb);
+			UnparseInstruction(&instr, null, &sb);
+			// Need to increment the instruction pointer manually in this case since we're not
+			// executing the instruction.
+			cpus.curr.ip += instr.base.size;
 		} else {
-			CPUExec(&cpus.curr, &result.instr);
-			UnparseInstruction(&result.instr, &cpus, &sb);
+			CPUExec(&cpus.curr, &instr);
+			UnparseInstruction(&instr, &cpus, &sb);
 		}
+
 		char* str = StringBuilderString(&sb);
 		printf("%s\n", str);
 		StringBuilderRewind(&sb);

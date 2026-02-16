@@ -127,6 +127,12 @@ typedef struct {
 
 typedef struct {
 	OpCode oc;
+	usize size;
+} BaseInstruction;
+
+typedef struct {
+	OpCode oc;
+	usize size;
 	LocPair locs;
 } LocPairInstruction;
 
@@ -137,21 +143,18 @@ typedef LocPairInstruction CmpInstruction;
 
 typedef struct {
 	OpCode oc;
+	usize size;
 	i8 disp;
 } SignedDisplacementInstruction;
 
 typedef SignedDisplacementInstruction JmpInstruction;
 
 typedef union {
-	OpCode oc;
+	BaseInstruction base;
 	LocPairInstruction locPair;
 	SignedDisplacementInstruction signedDisp;
 } Instruction;
 
-typedef struct {
-	Instruction instr;
-	usize sizeBytes;
-} DecodeResult;
-DecodeResult InstructionDecode(Buffer instrBuf);
+Instruction InstructionDecode(Buffer instrBuf);
 
 #endif // __INSTRUCTION_H__

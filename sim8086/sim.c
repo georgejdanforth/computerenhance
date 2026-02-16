@@ -16,8 +16,10 @@ static void execCmp(CPU* cpu, CmpInstruction* instr);
 
 void CPUInit(CPU* cpu) {
 	assert(cpu != null);
-	// Zero out flags
+
 	cpu->flags = 0;
+	cpu->ip = 0;
+
 	// Zero out all registers to begin with
 	memset(cpu->regs, 0, sizeof(u16) * NUM_REGISTERS);
 }
@@ -32,16 +34,19 @@ void CPUExec(CPU* cpu, Instruction* instr) {
 	break;
 
 	// clang-format off
-	switch (instr->oc.type) {
+	switch (instr->base.oc.type) {
 		case IT_MOV: EXEC(execMov, (MovInstruction*)&instr->locPair);
 		case IT_ADD: EXEC(execAdd, (AddInstruction*)&instr->locPair);
 		case IT_SUB: EXEC(execSub, (SubInstruction*)&instr->locPair);
 		case IT_CMP: EXEC(execCmp, (CmpInstruction*)&instr->locPair);
 		default:
-			fprintf(stderr, "Unhandled instruction in CPUExec: %d\n", instr->oc.type);
+			fprintf(stderr, "Unhandled instruction in CPUExec: %d\n", instr->base.oc.type);
 			assert(false);
 	}
-		// clang-format on
+	// clang-format on
+
+	// Increment instruction pointer by the encoded size (in bytes) of the instruction
+	cpu->ip += instr->base.size;
 
 #undef EXEC
 }

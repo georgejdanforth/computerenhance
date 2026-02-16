@@ -16,6 +16,7 @@ typedef enum {
 } CPUFlag;
 
 typedef struct {
+	usize ip;
 	u16 flags;
 	u16 regs[NUM_REGISTERS];
 } CPU;

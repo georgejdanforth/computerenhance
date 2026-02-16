@@ -520,23 +520,23 @@ static void decodeSignedDisplacement(DecodeContext* ctx,
 	instr->disp = byte(ctx, 1);
 }
 
-DecodeResult InstructionDecode(Buffer instrBuf) {
-	DecodeResult result = {0};
+Instruction InstructionDecode(Buffer instrBuf) {
+	Instruction instr;
 	DecodeContext ctx = {0};
 	ctx.instrBuf = instrBuf;
 
 	advance(&ctx, 1);
 
 	u8 b1 = byte(&ctx, 0);
-	result.instr.oc = OpCodeTable[b1];
+	instr.base.oc = OpCodeTable[b1];
 
-	switch (result.instr.oc.type) {
+	switch (instr.base.oc.type) {
 		case IT_ADD:
 		case IT_CMP:
 		case IT_MOV:
 		case IT_SUB:
 		case IT_GROUP_1:
-			decodeLocPair(&ctx, &result.instr.locPair);
+			decodeLocPair(&ctx, &instr.locPair);
 			break;
 		case IT_JA:
 		case IT_JAE:
@@ -558,13 +558,13 @@ DecodeResult InstructionDecode(Buffer instrBuf) {
 		case IT_LOOP:
 		case IT_LOOPNZ:
 		case IT_LOOPZ:
-			decodeSignedDisplacement(&ctx, &result.instr.signedDisp);
+			decodeSignedDisplacement(&ctx, &instr.signedDisp);
 			break;
 		default:
 			fprintf(stderr, "Unhandled opcode: %02x\n", b1);
 			assert(false);
 	}
 
-	result.sizeBytes = ctx.len;
-	return result;
+	instr.base.size = ctx.len;
+	return instr;
 }
