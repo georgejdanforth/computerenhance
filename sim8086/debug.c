@@ -269,6 +269,7 @@ void DumpCPURegisters(CPU* cpu) {
 	for (int i = 0; i < 16; i++) {
 		printRegister(cpu, (Register)i);
 	}
+	printf("ip: 0x%04lx (%lu)\n", cpu->ip, cpu->ip);
 	printFlags(buf, cpu->flags);
 	printf("\nFlags: %s\n", buf);
 }
