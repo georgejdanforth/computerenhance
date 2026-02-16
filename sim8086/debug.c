@@ -206,7 +206,6 @@ static void printFlags(char* buf, u16 flags) {
 
 static void cpuDiff(CPUPair* cpus, StringBuilder* sb) {
 	char buf[32];
-	bool hasDiff;
 	StringBuilderAppend(sb, " ;");
 	for (int i = 0; i < 16; i++) {
 		Register reg = (Register)i;
@@ -227,7 +226,6 @@ static void cpuDiff(CPUPair* cpus, StringBuilder* sb) {
 				if (*(u16*)prev != *(u16*)curr) {
 					sprintf(buf, " %s:0x%04x->0x%04x", regName, *(u16*)prev, *(u16*)curr);
 					StringBuilderAppend(sb, buf);
-					hasDiff = true;
 				}
 			}
 		}
@@ -240,12 +238,10 @@ static void cpuDiff(CPUPair* cpus, StringBuilder* sb) {
 		StringBuilderAppend(sb, "->");
 		printFlags(buf, cpus->curr.flags);
 		StringBuilderAppend(sb, buf);
-		hasDiff = true;
 	}
 
-	if (!hasDiff) {
-		StringBuilderAppend(sb, " no diff");
-	}
+	sprintf(buf, " ip:0x%04lx->0x%04lx", cpus->prev.ip, cpus->curr.ip);
+	StringBuilderAppend(sb, buf);
 }
 
 void printRegister(CPU* cpu, Register reg) {

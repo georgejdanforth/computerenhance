@@ -1,14 +1,14 @@
-mov cx, bx ; no diff
-mov ch, ah ; no diff
-mov dx, bx ; no diff
-mov si, bx ; no diff
-mov bx, di ; no diff
-mov al, cl ; no diff
-mov ch, ch ; no diff
-mov bx, ax ; no diff
-mov bx, si ; no diff
-mov sp, di ; no diff
-mov bp, ax ; no diff
+mov cx, bx ; ip:0x0000->0x0002
+mov ch, ah ; ip:0x0002->0x0004
+mov dx, bx ; ip:0x0004->0x0006
+mov si, bx ; ip:0x0006->0x0008
+mov bx, di ; ip:0x0008->0x000a
+mov al, cl ; ip:0x000a->0x000c
+mov ch, ch ; ip:0x000c->0x000e
+mov bx, ax ; ip:0x000e->0x0010
+mov bx, si ; ip:0x0010->0x0012
+mov sp, di ; ip:0x0012->0x0014
+mov bp, ax ; ip:0x0014->0x0016
 
 Final registers:
 ax: 0x0000 (0)

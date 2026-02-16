@@ -1,4 +1,4 @@
-mov cx, bx ; no diff
+mov cx, bx ; ip:0x0000->0x0002
 
 Final registers:
 ax: 0x0000 (0)
