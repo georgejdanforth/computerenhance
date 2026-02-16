@@ -29,3 +29,6 @@ test-regress-sim8086-exec: $(TARGET)
 	./scripts/test-regress-sim8086.sh exec
 
 test-regress-sim8086: test-regress-sim8086-decode test-regress-sim8086-exec
+
+regen-sim8086-testdata: $(TARGET)
+	./scripts/regen-sim8086-testdata.sh
