@@ -13,6 +13,7 @@ static void execMov(CPU* cpu, MovInstruction* instr);
 static void execAdd(CPU* cpu, AddInstruction* instr);
 static void execSub(CPU* cpu, SubInstruction* instr);
 static void execCmp(CPU* cpu, CmpInstruction* instr);
+static void execJne(CPU* cpu, JneInstruction* instr);
 
 void CPUInit(CPU* cpu) {
 	assert(cpu != null);
@@ -33,20 +34,21 @@ void CPUExec(CPU* cpu, Instruction* instr) {
 	_fn(cpu, _instr);                                                                     \
 	break;
 
+	// Increment instruction pointer by the encoded size (in bytes) of the instruction
+	cpu->ip += instr->base.size;
+
 	// clang-format off
 	switch (instr->base.oc.type) {
 		case IT_MOV: EXEC(execMov, (MovInstruction*)&instr->locPair);
 		case IT_ADD: EXEC(execAdd, (AddInstruction*)&instr->locPair);
 		case IT_SUB: EXEC(execSub, (SubInstruction*)&instr->locPair);
 		case IT_CMP: EXEC(execCmp, (CmpInstruction*)&instr->locPair);
+		case IT_JNE: EXEC(execJne, (JneInstruction*)&instr->locPair);
 		default:
 			fprintf(stderr, "Unhandled instruction in CPUExec: %d\n", instr->base.oc.type);
 			assert(false);
 	}
-	// clang-format on
-
-	// Increment instruction pointer by the encoded size (in bytes) of the instruction
-	cpu->ip += instr->base.size;
+		// clang-format on
 
 #undef EXEC
 }
@@ -78,6 +80,10 @@ static inline void setFlag(CPU* cpu, CPUFlag flag) {
 
 static inline void unsetFlag(CPU* cpu, CPUFlag flag) {
 	cpu->flags &= ~flag;
+}
+
+static inline bool flagIsSet(CPU* cpu, CPUFlag flag) {
+	return (cpu->flags & flag) == flag;
 }
 
 static inline void handleZeroFlag(CPU* cpu, void* dst, bool isWord) {
@@ -155,4 +161,15 @@ static void execCmp(CPU* cpu, CmpInstruction* instr) {
 
 	handleZeroFlag(cpu, dst, instr->locs.isWord);
 	handleSignFlag(cpu, dst, instr->locs.isWord);
+}
+
+static void execJne(CPU* cpu, JneInstruction* instr) {
+	if (flagIsSet(cpu, ZF)) {
+		return;
+	}
+	if (instr->disp > 0) {
+		cpu->ip += (usize)(instr->disp);
+	} else {
+		cpu->ip -= (usize)(-1 * instr->disp);
+	}
 }

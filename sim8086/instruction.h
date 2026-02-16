@@ -148,6 +148,7 @@ typedef struct {
 } SignedDisplacementInstruction;
 
 typedef SignedDisplacementInstruction JmpInstruction;
+typedef SignedDisplacementInstruction JneInstruction;
 
 typedef union {
 	BaseInstruction base;
