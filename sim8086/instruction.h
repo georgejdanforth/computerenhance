@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 
+#include "common/buffer.h"
 #include "common/types.h"
 
 typedef enum {
@@ -149,9 +150,8 @@ typedef union {
 
 typedef struct {
 	Instruction instr;
-	bool eof;
+	usize sizeBytes;
 } DecodeResult;
-
-DecodeResult InstructionDecodeFromFile(File* f);
+DecodeResult InstructionDecode(Buffer instrBuf);
 
 #endif // __INSTRUCTION_H__

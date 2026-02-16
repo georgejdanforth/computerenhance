@@ -268,15 +268,23 @@ const OpCode OpCodeTable[] = {
 // ============================================================================
 
 typedef struct {
-	File* f;
+	Buffer instrBuf;
 	u8 len;
-	u8 bytes[6];
 } DecodeContext;
 
-static void readBytes(DecodeContext* ctx, usize n) {
-	usize nread = fread(ctx->bytes + ctx->len, sizeof(u8), n, ctx->f);
-	ctx->len += nread;
-	assert(nread == n);
+static inline void advance(DecodeContext* ctx, usize n) {
+	assert(ctx->len + n <= ctx->instrBuf.size);
+	ctx->len += n;
+}
+
+static inline u8 byte(DecodeContext* ctx, int i) {
+	if (i < 0) {
+		assert(-1 * i <= ctx->len);
+		return ctx->instrBuf.data[ctx->len + i];
+	} else {
+		assert(i < ctx->len);
+		return ctx->instrBuf.data[i];
+	}
 }
 
 static Register getRegister(u8 b, bool w) {
@@ -319,7 +327,7 @@ static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc) {
 	loc->type = LOC_MEM;
 	loc->disp = 0;
 
-	u8 b2 = ctx->bytes[1];
+	u8 b2 = byte(ctx, 1);
 
 	// clang-format off
 	switch (b2 & 0x07) {
@@ -342,11 +350,11 @@ static void decodeMemoryLoc(DecodeContext* ctx, MemoryLoc* loc) {
 	if (mode == 0x00) {
 		return;
 	} else if (mode == 0x40) {
-		readBytes(ctx, 1);
-		loc->disp = (u16)(i16)(i8)(ctx->bytes[ctx->len - 1]);
+		advance(ctx, 1);
+		loc->disp = (u16)(i16)(i8)(byte(ctx, -1));
 	} else if (mode == 0x80) {
-		readBytes(ctx, 2);
-		loc->disp = ((u16)(ctx->bytes[ctx->len - 2])) | ((u16)(ctx->bytes[ctx->len - 1]) << 8);
+		advance(ctx, 2);
+		loc->disp = ((u16)(byte(ctx, -2))) | ((u16)(byte(ctx, -1)) << 8);
 	} else {
 		fprintf(stderr, "Unexpected mode value: %02x", mode);
 		assert(false);
@@ -359,25 +367,25 @@ static void decodeImmediateLoc(DecodeContext* ctx, ImmediateLoc* loc, bool s, bo
 	loc->type = LOC_IMM;
 
 	if (s && w) {
-		readBytes(ctx, 1);
-		loc->data = (u16)(i16)(i8)(ctx->bytes[ctx->len - 1]);
+		advance(ctx, 1);
+		loc->data = (u16)(i16)(i8)(byte(ctx, -1));
 		loc->isSigned = true;
 	} else if (w) {
-		readBytes(ctx, 2);
-		loc->data = ((u16)ctx->bytes[ctx->len - 2]) | ((u16)ctx->bytes[ctx->len - 1] << 8);
+		advance(ctx, 2);
+		loc->data = ((u16)(byte(ctx, -2))) | ((u16)(byte(ctx, -1)) << 8);
 		loc->isSigned = false;
 	} else {
-		readBytes(ctx, 1);
-		loc->data = (u16)ctx->bytes[ctx->len - 1];
+		advance(ctx, 1);
+		loc->data = (u16)(byte(ctx, -1));
 		loc->isSigned = false;
 	}
 }
 
 static void decodeModRM(DecodeContext* ctx, LocPair* locs) {
-	readBytes(ctx, 1);
+	advance(ctx, 1);
 
-	u8 b1 = ctx->bytes[0];
-	u8 b2 = ctx->bytes[1];
+	u8 b1 = byte(ctx, 0);
+	u8 b2 = byte(ctx, 1);
 	bool d = (b1 & 0x02) == 0x02;
 	bool w = (b1 & 0x01) == 0x01;
 	locs->isWord = w;
@@ -404,7 +412,7 @@ static void decodeModRM(DecodeContext* ctx, LocPair* locs) {
 }
 
 static void decodeRegImm(DecodeContext* ctx, LocPair* locs) {
-	u8 b1 = ctx->bytes[0];
+	u8 b1 = byte(ctx, 0);
 	bool w = (b1 & 0x08) == 0x08;
 	locs->isWord = w;
 
@@ -415,10 +423,10 @@ static void decodeRegImm(DecodeContext* ctx, LocPair* locs) {
 }
 
 static void decodeModRMImm(DecodeContext* ctx, LocPair* locs) {
-	readBytes(ctx, 1);
+	advance(ctx, 1);
 
-	u8 b1 = ctx->bytes[0];
-	u8 b2 = ctx->bytes[1];
+	u8 b1 = byte(ctx, 0);
+	u8 b2 = byte(ctx, 1);
 	bool w = (b1 & 0x01) == 0x01;
 	locs->isWord = w;
 
@@ -433,10 +441,10 @@ static void decodeModRMImm(DecodeContext* ctx, LocPair* locs) {
 }
 
 static void decodeModRMImmSW(DecodeContext* ctx, LocPair* locs) {
-	readBytes(ctx, 1);
+	advance(ctx, 1);
 
-	u8 b1 = ctx->bytes[0];
-	u8 b2 = ctx->bytes[1];
+	u8 b1 = byte(ctx, 0);
+	u8 b2 = byte(ctx, 1);
 	bool s = (b1 & 0x02) == 0x02;
 	bool w = (b1 & 0x01) == 0x01;
 	locs->isWord = w;
@@ -452,7 +460,7 @@ static void decodeModRMImmSW(DecodeContext* ctx, LocPair* locs) {
 }
 
 static void decodeAccImm(DecodeContext* ctx, LocPair* locs) {
-	bool w = (ctx->bytes[0] & 0x01) == 0x01;
+	bool w = (byte(ctx, 0) & 0x01) == 0x01;
 	locs->isWord = w;
 
 	locs->dst.reg.type = LOC_REG;
@@ -485,7 +493,7 @@ static void decodeLocPair(DecodeContext* ctx, LocPairInstruction* instr) {
 
 	// clang-format off
 	if (instr->oc.type == IT_GROUP_1) {
-		u8 b = (ctx->bytes[1] & 0x38) >> 3;
+		u8 b = (byte(ctx, 1) & 0x38) >> 3;
 		switch (b) {
 			case 0x00: UPDATE_INSTR(IT_ADD);
 			case 0x01: UPDATE_INSTR(IT_UNKNOWN); // OR
@@ -506,24 +514,20 @@ static void decodeLocPair(DecodeContext* ctx, LocPairInstruction* instr) {
 #undef DECODE
 }
 
-static void decodeSignedDisplacement(DecodeContext* ctx, SignedDisplacementInstruction* instr) {
-	readBytes(ctx, 1);
-	instr->disp = ctx->bytes[1];
+static void decodeSignedDisplacement(DecodeContext* ctx,
+                                     SignedDisplacementInstruction* instr) {
+	advance(ctx, 1);
+	instr->disp = byte(ctx, 1);
 }
 
-DecodeResult InstructionDecodeFromFile(File* f) {
+DecodeResult InstructionDecode(Buffer instrBuf) {
 	DecodeResult result = {0};
 	DecodeContext ctx = {0};
-	ctx.f = f;
+	ctx.instrBuf = instrBuf;
 
-	usize nread = fread(ctx.bytes, sizeof(u8), 1, f);
-	if (nread == 0) {
-		result.eof = true;
-		return result;
-	}
-	ctx.len = 1;
+	advance(&ctx, 1);
 
-	u8 b1 = ctx.bytes[0];
+	u8 b1 = byte(&ctx, 0);
 	result.instr.oc = OpCodeTable[b1];
 
 	switch (result.instr.oc.type) {
@@ -561,5 +565,6 @@ DecodeResult InstructionDecodeFromFile(File* f) {
 			assert(false);
 	}
 
+	result.sizeBytes = ctx.len;
 	return result;
 }

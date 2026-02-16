@@ -13,7 +13,7 @@ typedef struct {
 const char* InstructionTypeName(InstructionType type);
 const char* RegisterName(Register reg);
 
-void UnparseInstruction(Instruction* instr, CPUPair* cpuPair, StringBuilder* sb);
+void UnparseInstruction(Instruction* instr, CPUPair* cpus, StringBuilder* sb);
 void DumpCPURegisters(CPU* cpu);
 
 #endif // __DEBUG_H__
